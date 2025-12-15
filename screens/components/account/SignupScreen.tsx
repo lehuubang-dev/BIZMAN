@@ -10,8 +10,11 @@ import {
   ScrollView,
   Dimensions,
   Alert,
+  InteractionManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { authService } from '../../../services';
+import { ApiError } from '../../../types';
 
 const { width } = Dimensions.get('window');
 
@@ -43,12 +46,18 @@ export default function SignupScreen({
   const [otpSent, setOtpSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [sendingOTP, setSendingOTP] = useState(false);
+  const [otpLayoutReady, setOtpLayoutReady] = useState(false);
 
   // Focus states
   const [nameFocused, setNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+
+  // Field errors
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const otpInputs = useRef<Array<TextInput | null>>([]);
   const countdownTimer = useRef<NodeJS.Timeout | null>(null);
@@ -63,9 +72,30 @@ export default function SignupScreen({
     };
   }, []);
 
+  // Focus OTP after layout ready
+  useEffect(() => {
+    if (otpSent && otpLayoutReady) {
+      setTimeout(() => {
+        otpInputs.current[0]?.focus();
+      }, 100);
+    }
+  }, [otpSent, otpLayoutReady]);
+
   const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    const value = email.trim().toLowerCase();
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i;
+    return gmailRegex.test(value);
+  };
+
+  const validateName = (name: string) => {
+    return name.trim().length >= 3;
+  };
+
+  const validatePhoneVN = (phone: string) => {
+    // Vietnamese mobile numbers with specific prefixes
+    const digitsOnly = phone.replace(/\D/g, '');
+    const phoneRegex = /^(03[2-9]|05[2689]|07[06-9]|08[1-9]|09[0-9])\d{7}$/;
+    return phoneRegex.test(digitsOnly);
   };
 
   const startCountdown = () => {
@@ -93,41 +123,70 @@ export default function SignupScreen({
     }, 1000);
   };
 
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
+    if (sendingOTP) return; // debounce
     if (!email.trim()) {
       Alert.alert('Thông báo', 'Vui lòng nhập email');
       return;
     }
 
     if (!validateEmail(email)) {
-      Alert.alert('Thông báo', 'Email không hợp lệ');
+      Alert.alert('Thông báo', 'Email phải là địa chỉ Gmail (@gmail.com)');
       return;
     }
 
     setSendingOTP(true);
-    setTimeout(() => {
+    
+    try {
+      const response = await authService.sendOTP({ email });
       setSendingOTP(false);
       setOtpSent(true);
       startCountdown();
-      Alert.alert('Thành công', `Mã OTP đã được gửi đến ${email}`);
+      Alert.alert('Thành công', response.message || `Mã OTP đã được gửi đến ${email}`);
       // Focus vào ô OTP đầu tiên
-      setTimeout(() => {
-        otpInputs.current[0]?.focus();
-      }, 500);
-    }, 1000);
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => {
+          otpInputs.current[0]?.focus();
+        }, 300);
+      });
+    } catch (error) {
+      setSendingOTP(false);
+      const apiError = error as ApiError;
+      Alert.alert('Lỗi', apiError.message || 'Không thể gửi mã OTP');
+    }
   };
 
-  const handleResendOTP = () => {
-    if (countdown > 0) return;
+  const handleResendOTP = async () => {
+    if (sendingOTP || countdown > 0) return; // debounce and countdown guard
     
     setSendingOTP(true);
-    setTimeout(() => {
+    
+    try {
+      const response = await authService.sendOTP({ email });
       setSendingOTP(false);
       setOtp(['', '', '', '', '', '']);
       startCountdown();
-      Alert.alert('Thành công', 'Mã OTP mới đã được gửi');
-      otpInputs.current[0]?.focus();
-    }, 1000);
+      Alert.alert('Thành công', response.message || 'Mã OTP mới đã được gửi');
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => {
+          otpInputs.current[0]?.focus();
+        }, 300);
+      });
+    } catch (error) {
+      setSendingOTP(false);
+      const apiError = error as ApiError;
+      Alert.alert('Lỗi', apiError.message || 'Không thể gửi mã OTP');
+    }
+  };
+
+  // Single handler to avoid onPress race conditions
+  const handlePressSendOtp = () => {
+    if (sendingOTP) return;
+    if (otpSent) {
+      handleResendOTP();
+    } else {
+      handleSendOTP();
+    }
   };
 
   const handleOtpChange = (value: string, index: number) => {
@@ -149,7 +208,7 @@ export default function SignupScreen({
     }
   };
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (!fullName.trim()) {
       Alert.alert('Thông báo', 'Vui lòng nhập họ và tên');
       return;
@@ -192,16 +251,27 @@ export default function SignupScreen({
     }
 
     setLoading(true);
-    setTimeout(() => {
+    
+    try {
+      const response = await authService.signup({
+        phone,
+        email,
+        password,
+        role: 'USER',
+        otp: otpCode,
+      });
+      
       setLoading(false);
+      
       const userData: UserData = {
         name: fullName,
         email: email,
         phone: phone,
       };
+      
       Alert.alert(
         'Thành công',
-        'Đăng ký tài khoản thành công!',
+        response.message || 'Đăng ký tài khoản thành công!',
         [
           {
             text: 'OK',
@@ -209,7 +279,11 @@ export default function SignupScreen({
           },
         ]
       );
-    }, 1500);
+    } catch (error) {
+      setLoading(false);
+      const apiError = error as ApiError;
+      Alert.alert('Lỗi', apiError.message || 'Đăng ký thất bại');
+    }
   };
 
   return (
@@ -269,12 +343,25 @@ export default function SignupScreen({
                 placeholder="Nhập họ và tên"
                 placeholderTextColor="#999"
                 value={fullName}
-                onChangeText={setFullName}
+                onChangeText={(v) => {
+                  setFullName(v);
+                  if (v.length === 0) {
+                    setNameError(null);
+                  } else {
+                    setNameError(validateName(v) ? null : 'Họ và tên phải có ít nhất 3 ký tự');
+                  }
+                }}
                 onFocus={() => setNameFocused(true)}
-                onBlur={() => setNameFocused(false)}
+                onBlur={() => {
+                  setNameFocused(false);
+                  setNameError(validateName(fullName) ? null : 'Họ và tên phải có ít nhất 3 ký tự');
+                }}
                 editable={!loading}
               />
             </View>
+            {nameError && (
+              <Text style={styles.fieldError}>{nameError}</Text>
+            )}
           </View>
 
           {/* Email Input with Send OTP Button */}
@@ -301,9 +388,19 @@ export default function SignupScreen({
                   keyboardType="email-address"
                   autoCapitalize="none"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    if (v.length === 0) {
+                      setEmailError(null);
+                    } else {
+                      setEmailError(validateEmail(v) ? null : 'Email phải là địa chỉ Gmail (@gmail.com)');
+                    }
+                  }}
                   onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
+                  onBlur={() => {
+                    setEmailFocused(false);
+                    setEmailError(validateEmail(email) ? null : 'Email phải là địa chỉ Gmail (@gmail.com)');
+                  }}
                   editable={!loading && !sendingOTP}
                 />
               </View>
@@ -312,8 +409,13 @@ export default function SignupScreen({
                   styles.sendOtpButton,
                   (sendingOTP || (otpSent && countdown > 0)) && styles.sendOtpButtonDisabled
                 ]}
-                onPress={otpSent ? handleResendOTP : handleSendOTP}
-                disabled={sendingOTP || (otpSent && countdown > 0)}
+                onPress={handlePressSendOtp}
+                disabled={
+                  sendingOTP ||
+                  (otpSent && countdown > 0) ||
+                  !email.trim() ||
+                  !validateEmail(email)
+                }
                 activeOpacity={0.8}
               >
                 {sendingOTP ? (
@@ -327,6 +429,9 @@ export default function SignupScreen({
                 )}
               </TouchableOpacity>
             </View>
+            {emailError && (
+              <Text style={styles.fieldError}>{emailError}</Text>
+            )}
             {otpSent && (
               <View style={styles.otpSentNotice}>
                 <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
@@ -358,13 +463,26 @@ export default function SignupScreen({
                 placeholderTextColor="#999"
                 keyboardType="phone-pad"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(v) => {
+                  setPhone(v);
+                  if (v.length === 0) {
+                    setPhoneError(null);
+                  } else {
+                    setPhoneError(validatePhoneVN(v) ? null : 'Số điện thoại Việt Nam không hợp lệ');
+                  }
+                }}
                 onFocus={() => setPhoneFocused(true)}
-                onBlur={() => setPhoneFocused(false)}
+                onBlur={() => {
+                  setPhoneFocused(false);
+                  setPhoneError(validatePhoneVN(phone) ? null : 'Số điện thoại Việt Nam không hợp lệ');
+                }}
                 editable={!loading}
-                maxLength={11}
+                maxLength={10}
               />
             </View>
+            {phoneError && (
+              <Text style={styles.fieldError}>{phoneError}</Text>
+            )}
           </View>
 
           {/* Password Input */}
@@ -417,7 +535,11 @@ export default function SignupScreen({
             <View style={styles.otpGroup}>
               <Text style={styles.label}>Mã OTP</Text>
               <Text style={styles.otpHint}>Nhập mã xác thực 6 số</Text>
-              <View style={styles.otpContainer}>
+              <View 
+                style={styles.otpContainer}
+                onStartShouldSetResponder={() => true}
+                onLayout={() => setOtpLayoutReady(true)}
+              >
                 {otp.map((digit, index) => (
                   <TextInput
                     key={index}
@@ -431,7 +553,7 @@ export default function SignupScreen({
                     value={digit}
                     onChangeText={(value) => handleOtpChange(value, index)}
                     onKeyPress={({ nativeEvent: { key } }) => handleOtpKeyPress(key, index)}
-                    keyboardType="number-pad"
+                    keyboardType="numeric"
                     maxLength={1}
                     selectTextOnFocus
                     editable={!loading}
@@ -612,6 +734,12 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   errorText: {
+    fontSize: 12,
+    color: '#F44336',
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  fieldError: {
     fontSize: 12,
     color: '#F44336',
     marginTop: 6,

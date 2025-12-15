@@ -12,6 +12,8 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { authService } from '../../../services';
+import { ApiError } from '../../../types';
 
 const { width } = Dimensions.get('window');
 
@@ -53,8 +55,9 @@ export default function ForgotPasswordScreen({
   }, []);
 
   const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+    const value = email.trim().toLowerCase();
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i;
+    return gmailRegex.test(value);
   };
 
   const startCountdown = () => {
@@ -82,40 +85,48 @@ export default function ForgotPasswordScreen({
     }, 1000);
   };
 
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     if (!email.trim()) {
       Alert.alert('Thông báo', 'Vui lòng nhập email');
       return;
     }
 
     if (!validateEmail(email)) {
-      Alert.alert('Thông báo', 'Email không hợp lệ');
+      Alert.alert('Thông báo', 'Email phải là địa chỉ Gmail (@gmail.com)');
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const res = await authService.sendForgotPasswordOTP({ email });
+      // Proceed to OTP step without success alert
       setStep('code');
       startCountdown();
-      Alert.alert('Thành công', 'Mã xác nhận đã được gửi đến email của bạn');
       setTimeout(() => {
         otpInputs.current[0]?.focus();
-      }, 500);
-    }, 1500);
+      }, 300);
+    } catch (error) {
+      const apiError = error as ApiError;
+      Alert.alert('Lỗi', apiError.message || 'Không thể gửi mã xác nhận');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResendOTP = () => {
-    if (countdown > 0) return;
-
+  const handleResendOTP = async () => {
+    if (countdown > 0 || loading) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const res = await authService.sendForgotPasswordOTP({ email });
       setOtp(['', '', '', '', '', '']);
       startCountdown();
-      Alert.alert('Thành công', 'Mã OTP mới đã được gửi');
       otpInputs.current[0]?.focus();
-    }, 1000);
+    } catch (error) {
+      const apiError = error as ApiError;
+      Alert.alert('Lỗi', apiError.message || 'Không thể gửi lại mã');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOtpChange = (value: string, index: number) => {
@@ -136,22 +147,18 @@ export default function ForgotPasswordScreen({
     }
   };
 
-  const handleVerifyOTP = () => {
+  const handleVerifyOTP = async () => {
     const otpCode = otp.join('');
     if (otpCode.length !== 6) {
       Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ mã OTP');
       return;
     }
 
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setStep('password');
-      Alert.alert('Thành công', 'Xác thực thành công! Vui lòng đặt mật khẩu mới');
-    }, 1500);
+    // No verify-otp endpoint; proceed to password step directly
+    setStep('password');
   };
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
     if (!newPassword.trim()) {
       Alert.alert('Thông báo', 'Vui lòng nhập mật khẩu mới');
       return;
@@ -166,21 +173,17 @@ export default function ForgotPasswordScreen({
       Alert.alert('Thông báo', 'Mật khẩu xác nhận không khớp');
       return;
     }
-
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const res = await authService.resetPassword({ email, otp: otp.join(''), newPassword });
+      // Navigate to login immediately without success alert
+      onSwitchToLogin();
+    } catch (error) {
+      const apiError = error as ApiError;
+      Alert.alert('Lỗi', apiError.message || 'Đặt lại mật khẩu thất bại');
+    } finally {
       setLoading(false);
-      Alert.alert(
-        'Thành công',
-        'Đặt lại mật khẩu thành công!',
-        [
-          {
-            text: 'Đăng nhập',
-            onPress: onSwitchToLogin,
-          },
-        ]
-      );
-    }, 1500);
+    }
   };
 
   const handleBack = () => {
@@ -346,7 +349,7 @@ export default function ForgotPasswordScreen({
               </View>
 
               <Text style={styles.otpLabel}>Nhập mã OTP</Text>
-              <View style={styles.otpContainer}>
+              <View style={styles.otpContainer} onStartShouldSetResponder={() => true}>
                 {otp.map((digit, index) => (
                   <TextInput
                     key={index}
@@ -360,7 +363,7 @@ export default function ForgotPasswordScreen({
                     value={digit}
                     onChangeText={(value) => handleOtpChange(value, index)}
                     onKeyPress={({ nativeEvent: { key } }) => handleOtpKeyPress(key, index)}
-                    keyboardType="number-pad"
+                    keyboardType="numeric"
                     maxLength={1}
                     selectTextOnFocus
                     editable={!loading}
@@ -385,7 +388,7 @@ export default function ForgotPasswordScreen({
               <TouchableOpacity
                 style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
                 onPress={handleVerifyOTP}
-                disabled={loading}
+                disabled={loading || otp.join('').length !== 6}
                 activeOpacity={0.8}
               >
                 <View style={styles.buttonContent}>
@@ -511,7 +514,7 @@ export default function ForgotPasswordScreen({
               <TouchableOpacity
                 style={[styles.primaryButton, loading && styles.primaryButtonDisabled]}
                 onPress={handleResetPassword}
-                disabled={loading}
+                disabled={loading || newPassword.length < 8 || newPassword !== confirmPassword}
                 activeOpacity={0.8}
               >
                 <View style={styles.buttonContent}>
@@ -810,6 +813,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginLeft: 8,
+    width: '90%',
   },
   primaryButton: {
     backgroundColor: '#2196F3',
