@@ -12,6 +12,8 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { authService } from '../../../services';
+import { ApiError } from '../../../types';
 
 const { width, height } = Dimensions.get('window');
 
@@ -42,7 +44,7 @@ export default function LoginScreen({
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Thông báo', 'Vui lòng nhập đầy đủ email và mật khẩu');
       return;
@@ -56,16 +58,28 @@ export default function LoginScreen({
     }
 
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const response = await authService.login({ email, password });
       setLoading(false);
+      
+      // Extract username from email and capitalize first letter
+      const emailUsername = email.split('@')[0];
+      const displayName = emailUsername.charAt(0).toUpperCase() + emailUsername.slice(1);
+      
       const userData: UserData = {
-        name: 'Nhân viên kho',
-        email: email,
-        phone: '0123456789',
+        name: response.user?.name || displayName,
+        email: response.user?.email || email,
+        phone: response.user?.phone,
+        avatar: response.user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=2196F3&color=fff&size=128`,
       };
+      
+      // Proceed to home without success alert
       onLoginSuccess(userData);
-    }, 1500);
+    } catch (error) {
+      setLoading(false);
+      const apiError = error as ApiError;
+      Alert.alert('Lỗi đăng nhập', apiError.message || 'Mật khẩu hoặc email không chính xác');
+    }
   };
 
   return (

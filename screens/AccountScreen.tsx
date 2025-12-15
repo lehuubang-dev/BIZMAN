@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 5,

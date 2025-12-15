@@ -1,11 +1,11 @@
-import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import HomeScreen from '../screens/HomeScreen';
-import ImportScreen from '../screens/ImportScreen';
-import ExportScreen from '../screens/ExportScreen';
-import AccountScreen from '../screens/AccountScreen';
+import React from "react";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import HomeScreen from "../screens/HomeScreen";
+import ImportScreen from "../screens/ImportScreen";
+import ExportScreen from "../screens/ExportScreen";
+import AccountScreen from "../screens/AccountScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -16,55 +16,81 @@ export default function TabNavigator() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
 
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Import') {
-            iconName = focused ? 'enter' : 'enter-outline';
-          } else if (route.name === 'Export') {
-            iconName = focused ? 'log-out' : 'log-out-outline';
-          } else if (route.name === 'Account') {
-            iconName = focused ? 'person-circle' : 'person-circle-outline';
+          if (route.name === "Home") {
+            iconName = focused ? "home" : "home-outline";
+          } else if (route.name === "Import") {
+            iconName = focused ? "enter" : "enter-outline";
+          } else if (route.name === "Export") {
+            iconName = focused ? "log-out" : "log-out-outline";
+          } else if (route.name === "Account") {
+            iconName = focused ? "person-circle" : "person-circle-outline";
           } else {
-            iconName = focused ? 'ellipsis-horizontal-circle' : 'ellipsis-horizontal-circle-outline';
+            iconName = focused
+              ? "ellipsis-horizontal-circle"
+              : "ellipsis-horizontal-circle-outline";
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#2196F3',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: "#2196F3",
+        tabBarInactiveTintColor: "gray",
         headerStyle: {
-          backgroundColor: '#2196F3',
+          backgroundColor: "#2196F3",
         },
-        headerTintColor: '#fff',
+        headerTintColor: "#fff",
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontWeight: "bold",
         },
       })}
     >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarLabel: 'Trang chủ', headerTitle: 'Trang chủ' }}
+        options={{
+          tabBarLabel: "Trang chủ",
+          headerTitle: "Trang chủ",
+          headerLeft: () => (
+            <TouchableOpacity style={{ marginLeft: 15, padding: 5 }}>
+              <Ionicons name="home" size={27} color="#fff" />
+            </TouchableOpacity>
+          ),
+        }}
       />
       <Tab.Screen
         name="Import"
         component={ImportScreen}
-        options={{ tabBarLabel: 'Nhập kho', headerTitle: 'Nhập kho' }}
+        options={{
+          tabBarLabel: "Nhập kho",
+          headerTitle: "Nhập kho",
+          headerLeft: () => (
+            <TouchableOpacity style={{ marginLeft: 15, padding: 5 }}>
+              <Ionicons name="enter" size={30} color="#fff" />
+            </TouchableOpacity>
+          ),
+        }}
       />
       <Tab.Screen
         name="Export"
         component={ExportScreen}
-        options={{ tabBarLabel: 'Xuất kho', headerTitle: 'Xuất kho' }}
+        options={{
+          tabBarLabel: "Xuất kho",
+          headerTitle: "Xuất kho",
+          headerLeft: () => (
+            <TouchableOpacity style={{ marginLeft: 15, padding: 5 }}>
+              <Ionicons name="log-out" size={30} color="#fff" />
+            </TouchableOpacity>
+          ),
+        }}
       />
       <Tab.Screen
         name="Account"
         component={AccountScreen}
-        options={{ 
-          tabBarLabel: 'Tài khoản', 
-          headerTitle: 'Tài khoản',
-          headerRight: () => (
-            <TouchableOpacity style={{ marginRight: 20 }}>
-              <Ionicons name="settings-outline" size={24} color="#fff" />
+        options={{
+          tabBarLabel: "Tài khoản",
+          headerTitle: "Tài khoản",
+          headerLeft: () => (
+            <TouchableOpacity style={{ marginLeft: 15, padding: 5}}>
+              <Ionicons name="person-circle" size={30} color="#fff" />
             </TouchableOpacity>
           ),
         }}
