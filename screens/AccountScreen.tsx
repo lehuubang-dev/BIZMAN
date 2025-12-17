@@ -19,12 +19,17 @@ import CompanyInfoScreen from "./components/account/CompanyInfoScreen";
 import TermsOfServiceScreen from "./components/account/TermsOfServiceScreen";
 import PrivacyPolicyScreen from "./components/account/PrivacyPolicyScreen";
 import FAQScreen from "./components/account/FAQScreen";
+import ProfileScreen from "./components/account/ProfileScreen";
+import TransactionsScreen from "./components/account/TransactionsScreen";
+import NotificationsScreen from "./components/account/NotificationsScreen";
+import SettingsScreen from "./components/account/SettingsScreen";
 
 const { width } = Dimensions.get("window");
 
 type AuthScreen = "login" | "signup" | "forgot-password";
 type InfoScreen = "email-support" | "company-info" | "terms" | "privacy" | "faq";
-type Screen = AuthScreen | InfoScreen;
+type QuickScreen = "profile" | "transactions" | "notifications" | "settings";
+type Screen = AuthScreen | InfoScreen | QuickScreen;
 
 interface UserData {
   name: string;
@@ -139,6 +144,24 @@ export default function AccountScreen() {
     return <FAQScreen onBack={() => setCurrentScreen(null)} />;
   }
 
+  if (currentScreen === "profile") {
+    return (
+      <ProfileScreen user={userData} onBack={() => setCurrentScreen(null)} />
+    );
+  }
+
+  if (currentScreen === "transactions") {
+    return <TransactionsScreen onBack={() => setCurrentScreen(null)} />;
+  }
+
+  if (currentScreen === "notifications") {
+    return <NotificationsScreen onBack={() => setCurrentScreen(null)} />;
+  }
+
+  if (currentScreen === "settings") {
+    return <SettingsScreen onBack={() => setCurrentScreen(null)} />;
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -190,25 +213,25 @@ export default function AccountScreen() {
               {userData?.email || ""}
             </Text>
 
-            {/* Membership Card */}
+            {/* Warehouse Stats Card */}
             <View style={styles.membershipCard}>
               <View style={styles.membershipLeft}>
                 <View style={styles.membershipBadge}>
-                  <Ionicons name="star" size={18} color="#fff" />
+                  <Ionicons name="cube-outline" size={18} color="#fff" />
                 </View>
                 <View style={styles.membershipTextContainer}>
                   <Text style={styles.membershipTitle} numberOfLines={1}>
-                    Thành viên Bạc
+                    Tổng tồn kho
                   </Text>
                   <Text style={styles.membershipSubtitle} numberOfLines={1}>
-                    ID: #MB{Math.floor(Math.random() * 100000)}
+                    Cập nhật hôm nay
                   </Text>
                 </View>
               </View>
               <View style={styles.pointsContainer}>
                 <Text style={styles.pointsValue}>0</Text>
                 <Text style={styles.pointsLabel} numberOfLines={1}>
-                  Điểm
+                  Sản phẩm
                 </Text>
               </View>
             </View>
@@ -216,7 +239,10 @@ export default function AccountScreen() {
 
           {/* Quick Actions */}
           <View style={styles.quickActionsContainer}>
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => setCurrentScreen("profile")}
+            >
               <View
                 style={[
                   styles.actionIconWrapper,
@@ -230,7 +256,10 @@ export default function AccountScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => setCurrentScreen("transactions")}
+            >
               <View
                 style={[
                   styles.actionIconWrapper,
@@ -244,7 +273,10 @@ export default function AccountScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => setCurrentScreen("notifications")}
+            >
               <View
                 style={[
                   styles.actionIconWrapper,
@@ -262,7 +294,10 @@ export default function AccountScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.quickActionCard}>
+            <TouchableOpacity
+              style={styles.quickActionCard}
+              onPress={() => setCurrentScreen("settings")}
+            >
               <View
                 style={[
                   styles.actionIconWrapper,
@@ -721,6 +756,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#FF9800",
     marginTop: 2,
+    width: "100%",
   },
 
   // Quick Actions
