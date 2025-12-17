@@ -148,8 +148,6 @@ export default function ImportScreen() {
 
   return (
     <View style={styles.container}>
- 
-
       <ScrollView 
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}

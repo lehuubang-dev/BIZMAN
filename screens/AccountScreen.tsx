@@ -14,10 +14,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import LoginScreen from "./components/account/LoginScreen";
 import SignupScreen from "./components/account/SignupScreen";
 import ForgotPasswordScreen from "./components/account/ForgotPasswordScreen";
+import EmailSupportScreen from "./components/account/EmailSupportScreen";
+import CompanyInfoScreen from "./components/account/CompanyInfoScreen";
+import TermsOfServiceScreen from "./components/account/TermsOfServiceScreen";
+import PrivacyPolicyScreen from "./components/account/PrivacyPolicyScreen";
+import FAQScreen from "./components/account/FAQScreen";
 
 const { width } = Dimensions.get("window");
 
 type AuthScreen = "login" | "signup" | "forgot-password";
+type InfoScreen = "email-support" | "company-info" | "terms" | "privacy" | "faq";
+type Screen = AuthScreen | InfoScreen;
 
 interface UserData {
   name: string;
@@ -29,7 +36,7 @@ interface UserData {
 export default function AccountScreen() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<AuthScreen | null>(null);
+  const [currentScreen, setCurrentScreen] = useState<Screen | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -110,6 +117,26 @@ export default function AccountScreen() {
         onBack={() => setCurrentScreen(null)}
       />
     );
+  }
+
+  if (currentScreen === "email-support") {
+    return <EmailSupportScreen onBack={() => setCurrentScreen(null)} />;
+  }
+
+  if (currentScreen === "company-info") {
+    return <CompanyInfoScreen onBack={() => setCurrentScreen(null)} />;
+  }
+
+  if (currentScreen === "terms") {
+    return <TermsOfServiceScreen onBack={() => setCurrentScreen(null)} />;
+  }
+
+  if (currentScreen === "privacy") {
+    return <PrivacyPolicyScreen onBack={() => setCurrentScreen(null)} />;
+  }
+
+  if (currentScreen === "faq") {
+    return <FAQScreen onBack={() => setCurrentScreen(null)} />;
   }
 
   if (loading) {
@@ -254,7 +281,7 @@ export default function AccountScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông tin & Hỗ trợ</Text>
             <View style={styles.menuContainer}>
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("email-support")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons name="mail-outline" size={20} color="#2196F3" />
@@ -264,14 +291,14 @@ export default function AccountScreen() {
                       Email hỗ trợ
                     </Text>
                     <Text style={styles.menuSubtext} numberOfLines={1}>
-                      support@bizman.vn
+                      info@ccvi.vn
                     </Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("company-info")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -287,7 +314,7 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("terms")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -303,7 +330,7 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("privacy")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -319,7 +346,7 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.menuItem, styles.lastMenuItem]}>
+              <TouchableOpacity style={[styles.menuItem, styles.lastMenuItem]} onPress={() => setCurrentScreen("faq")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -436,7 +463,7 @@ export default function AccountScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông tin liên hệ</Text>
             <View style={styles.menuContainer}>
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("email-support")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons name="mail-outline" size={20} color="#2196F3" />
@@ -446,14 +473,14 @@ export default function AccountScreen() {
                       Email
                     </Text>
                     <Text style={styles.menuSubtext} numberOfLines={1}>
-                      support@bizman.vn
+                      info@ccvi.vn
                     </Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("company-info")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -469,7 +496,7 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("terms")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -485,7 +512,7 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.menuItem}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => setCurrentScreen("privacy")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -501,7 +528,7 @@ export default function AccountScreen() {
                 <Ionicons name="chevron-forward" size={20} color="#BDBDBD" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.menuItem, styles.lastMenuItem]}>
+              <TouchableOpacity style={[styles.menuItem, styles.lastMenuItem]} onPress={() => setCurrentScreen("faq")}>
                 <View style={styles.menuLeft}>
                   <View style={styles.menuIconWrapper}>
                     <Ionicons
@@ -585,8 +612,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   avatar: {
-    width: 100,
-    height: 100,
+    width: 80,
+    height: 80,
     borderRadius: 50,
     borderWidth: 4,
     borderColor: "#fff",
@@ -887,6 +914,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     textAlign: "center",
+    width: "80%",
   },
 
   // Benefits Preview
