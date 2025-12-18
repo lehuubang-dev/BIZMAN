@@ -1,8 +1,8 @@
 import { ApiError } from '../types';
 import { API_BASE_URL as ENV_API_BASE_URL } from '@env';
 
-// API Base URL from environment variable
-export const API_BASE_URL = ENV_API_BASE_URL;
+// API Base URL from environment variable with fallback
+export const API_BASE_URL = ENV_API_BASE_URL || 'https://api.eduhubvn.com/api/v1';
 
 // API Configuration
 const DEFAULT_HEADERS = {
@@ -47,6 +47,12 @@ export class ApiClient {
       },
     };
 
+    console.log('API Request:', {
+      url,
+      method: config.method || 'GET',
+      headers: config.headers,
+    });
+
     try {
       const response = await fetch(url, config);
       let data: any = null;
@@ -78,9 +84,25 @@ export class ApiClient {
 
       return data as T;
     } catch (error) {
+      console.error('API Error:', {
+        url,
+        error,
+        message: (error as any)?.message,
+      });
+      
       if ((error as ApiError).message) {
         throw error;
       }
+      
+      // More specific error messages
+      const errorMessage = (error as any)?.message || '';
+      if (errorMessage.includes('Network request failed') || errorMessage.includes('fetch failed')) {
+        throw {
+          message: `Cannot connect to server: ${this.baseUrl}. Please check your internet connection or API URL.`,
+          status: 0,
+        } as ApiError;
+      }
+      
       throw {
         message: 'Network error. Please check your connection.',
         status: 0,

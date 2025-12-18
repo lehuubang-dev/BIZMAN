@@ -22,15 +22,32 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.lehuubang.BizMan"
+      "package": "com.lehuubang.BizMan",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      "./withNetworkSecurityConfig",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
     "extra": {
       "eas": {
-        "projectId": "53cc3030-b284-4486-a9e7-8ce19f93be68"
+        "projectId": "5b433ec3-1007-4c30-9117-ee8e5dd05131"
       }
-    }
+    },
+    "owner": "ccvi"
   }
 }
