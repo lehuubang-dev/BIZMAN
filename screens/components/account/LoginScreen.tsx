@@ -78,7 +78,23 @@ export default function LoginScreen({
     } catch (error) {
       setLoading(false);
       const apiError = error as ApiError;
-      Alert.alert('Lỗi đăng nhập', apiError.message || 'Mật khẩu hoặc email không chính xác');
+      
+      // Debug info for APK environment
+      const errorDetails = [
+        `Thông báo: ${apiError.message || 'Mật khẩu hoặc email không chính xác'}`,
+        apiError.status !== undefined ? `Mã lỗi: ${apiError.status}` : null,
+        apiError.code ? `Code: ${apiError.code}` : null,
+        __DEV__ ? `Email: ${email}` : null,
+      ].filter(Boolean).join('\n');
+      
+      console.error('Login error details:', {
+        message: apiError.message,
+        status: apiError.status,
+        code: apiError.code,
+        email,
+      });
+      
+      Alert.alert('Lỗi đăng nhập', errorDetails);
     }
   };
 
