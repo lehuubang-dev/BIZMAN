@@ -17,15 +17,16 @@ class AuthService {
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>(
-      '/auth/login',
+      '/api/v1/auth/login',
       credentials
     );
-    
-    // Save token if present
-    if (response.token) {
-      apiClient.setToken(response.token);
+
+    // Save token if present - API may return accessToken at root or in data
+    const accessToken = (response as any)?.accessToken ?? (response as any)?.data?.accessToken;
+    if (accessToken) {
+      apiClient.setToken(accessToken);
     }
-    
+
     return response;
   }
 
@@ -33,18 +34,20 @@ class AuthService {
    * Send OTP for signup
    */
   async sendOTP(data: SendOTPRequest): Promise<SendOTPResponse> {
-    return apiClient.post<SendOTPResponse>('/auth/send-otp', data);
+    return apiClient.post<SendOTPResponse>('/api/v1/auth/send-otp', data);
   }
 
   /**
    * Signup new user
    */
   async signup(data: SignupRequest): Promise<SignupResponse> {
-    const response = await apiClient.post<SignupResponse>('/auth/register', data);
+    const response = await apiClient.post<SignupResponse>('/api/v1/auth/register', data);
     
-    // Save token if present
-    if (response.token) {
-      apiClient.setToken(response.token);
+    // Save token if present - handle both old and new response format
+    if ((response as any).data?.accessToken) {
+      apiClient.setToken((response as any).data.accessToken);
+    } else if ((response as any).token) {
+      apiClient.setToken((response as any).token);
     }
     
     return response;
@@ -54,21 +57,21 @@ class AuthService {
    * Send OTP for forgot password
    */
   async sendForgotPasswordOTP(data: ForgotPasswordRequest): Promise<{ message: string }> {
-    return apiClient.post<{ message: string }>('/auth/forgot-password', data);
+    return apiClient.post<{ message: string }>('/api/v1/auth/forgot-password', data);
   }
 
   /**
    * Verify OTP
    */
   async verifyOTP(data: VerifyOTPRequest): Promise<{ message: string; verified: boolean }> {
-    return apiClient.post<{ message: string; verified: boolean }>('/auth/verify-otp', data);
+    return apiClient.post<{ message: string; verified: boolean }>('/api/v1/auth/verify-otp', data);
   }
 
   /**
    * Reset password
    */
   async resetPassword(data: ResetPasswordRequest): Promise<{ message: string }> {
-    return apiClient.post<{ message: string }>('/auth/reset-password', data);
+    return apiClient.post<{ message: string }>('/api/v1/auth/reset-password', data);
   }
 
   /**

@@ -37,8 +37,8 @@ export default function LoginScreen({
   onBack,
   onLoginSuccess 
 }: LoginScreenProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('admin@gmail.com');
+  const [password, setPassword] = useState('ccvi@123');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
@@ -67,10 +67,10 @@ export default function LoginScreen({
       const displayName = emailUsername.charAt(0).toUpperCase() + emailUsername.slice(1);
       
       const userData: UserData = {
-        name: response.user?.name || displayName,
-        email: response.user?.email || email,
-        phone: response.user?.phone,
-        avatar: response.user?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=2196F3&color=fff&size=128`,
+        name: displayName,
+        email: response.data?.email || email,
+        phone: undefined,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=2196F3&color=fff&size=128`,
       };
       
       // Proceed to home without success alert

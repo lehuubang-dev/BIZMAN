@@ -3,8 +3,9 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import HomeScreen from "../screens/HomeScreen";
-import ImportScreen from "../screens/ImportScreen";
-import ExportScreen from "../screens/ExportScreen";
+import InventoryScreen from "../screens/InventoryScreen";
+import OrdersScreen from "../screens/OrdersScreen";
+import ReportsScreen from "../screens/ReportsScreen";
 import AccountScreen from "../screens/AccountScreen";
 
 const Tab = createBottomTabNavigator();
@@ -18,10 +19,12 @@ export default function TabNavigator() {
 
           if (route.name === "Home") {
             iconName = focused ? "home" : "home-outline";
-          } else if (route.name === "Import") {
-            iconName = focused ? "enter" : "enter-outline";
-          } else if (route.name === "Export") {
-            iconName = focused ? "log-out" : "log-out-outline";
+          } else if (route.name === "Inventory") {
+            iconName = focused ? "cube" : "cube-outline";
+          } else if (route.name === "Orders") {
+            iconName = focused ? "cart" : "cart-outline";
+          } else if (route.name === "Reports") {
+            iconName = focused ? "bar-chart" : "bar-chart-outline";
           } else if (route.name === "Account") {
             iconName = focused ? "person-circle" : "person-circle-outline";
           } else {
@@ -57,27 +60,40 @@ export default function TabNavigator() {
         }}
       />
       <Tab.Screen
-        name="Import"
-        component={ImportScreen}
+        name="Inventory"
+        component={InventoryScreen}
         options={{
-          tabBarLabel: "Nhập kho",
-          headerTitle: "Nhập kho",
+          tabBarLabel: "Hàng hóa",
+          headerTitle: "Quản lý hàng hóa",
           headerLeft: () => (
             <TouchableOpacity style={{ marginLeft: 15, padding: 5 }}>
-              <Ionicons name="enter" size={30} color="#fff" />
+              <Ionicons name="cube" size={27} color="#fff" />
             </TouchableOpacity>
           ),
         }}
       />
       <Tab.Screen
-        name="Export"
-        component={ExportScreen}
+        name="Orders"
+        component={OrdersScreen}
         options={{
-          tabBarLabel: "Xuất kho",
-          headerTitle: "Xuất kho",
+          tabBarLabel: "Đơn hàng",
+          headerTitle: "Quản lý đơn hàng",
           headerLeft: () => (
             <TouchableOpacity style={{ marginLeft: 15, padding: 5 }}>
-              <Ionicons name="log-out" size={30} color="#fff" />
+              <Ionicons name="cart" size={27} color="#fff" />
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Reports"
+        component={ReportsScreen}
+        options={{
+          tabBarLabel: "Báo cáo",
+          headerTitle: "Báo cáo",
+          headerLeft: () => (
+            <TouchableOpacity style={{ marginLeft: 15, padding: 5 }}>
+              <Ionicons name="bar-chart" size={27} color="#fff" />
             </TouchableOpacity>
           ),
         }}
@@ -90,7 +106,7 @@ export default function TabNavigator() {
           headerTitle: "Tài khoản",
           headerLeft: () => (
             <TouchableOpacity style={{ marginLeft: 15, padding: 5}}>
-              <Ionicons name="person-circle" size={30} color="#fff" />
+              <Ionicons name="person-circle" size={27} color="#fff" />
             </TouchableOpacity>
           ),
         }}

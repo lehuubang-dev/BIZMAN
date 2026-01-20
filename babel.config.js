@@ -22,6 +22,8 @@ module.exports = function (api) {
           verbose: false,
         },
       ],
+      // ⚠️ Reanimated PHẢI để CUỐI CÙNG
+      'react-native-reanimated/plugin',
     ],
   };
 };

@@ -23,35 +23,35 @@ interface Product {
   price: number;
 }
 
-interface ImportItem {
+interface OrderItem {
   product: Product;
   quantity: number;
   note: string;
 }
 
-export default function ImportScreen() {
-  const [supplier, setSupplier] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [importDate, setImportDate] = useState(new Date().toLocaleDateString('vi-VN'));
+export default function OrdersScreen() {
+  const [customer, setCustomer] = useState('');
+  const [orderNumber, setOrderNumber] = useState('');
+  const [orderDate, setOrderDate] = useState(new Date().toLocaleDateString('vi-VN'));
   const [note, setNote] = useState('');
-  const [importItems, setImportItems] = useState<ImportItem[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState('');
   const [itemNote, setItemNote] = useState('');
 
   // Focus states
-  const [supplierFocused, setSupplierFocused] = useState(false);
-  const [invoiceFocused, setInvoiceFocused] = useState(false);
+  const [customerFocused, setCustomerFocused] = useState(false);
+  const [orderFocused, setOrderFocused] = useState(false);
   const [noteFocused, setNoteFocused] = useState(false);
 
-  // Mock data - danh sách sản phẩm
+  // Mock data - danh sách sản phẩm trong kho
   const products: Product[] = [
-    { id: '1', name: 'Laptop Dell XPS 13', quantity: 50, unit: 'Chiếc', price: 25000000 },
-    { id: '2', name: 'iPhone 15 Pro Max', quantity: 30, unit: 'Chiếc', price: 35000000 },
-    { id: '3', name: 'Samsung Galaxy S24', quantity: 40, unit: 'Chiếc', price: 22000000 },
-    { id: '4', name: 'iPad Air M2', quantity: 25, unit: 'Chiếc', price: 18000000 },
-    { id: '5', name: 'AirPods Pro 2', quantity: 100, unit: 'Chiếc', price: 6500000 },
+    { id: '1', name: 'Laptop Dell XPS 13', quantity: 45, unit: 'Chiếc', price: 25000000 },
+    { id: '2', name: 'iPhone 15 Pro Max', quantity: 28, unit: 'Chiếc', price: 35000000 },
+    { id: '3', name: 'Samsung Galaxy S24', quantity: 35, unit: 'Chiếc', price: 22000000 },
+    { id: '4', name: 'iPad Air M2', quantity: 20, unit: 'Chiếc', price: 18000000 },
+    { id: '5', name: 'AirPods Pro 2', quantity: 85, unit: 'Chiếc', price: 6500000 },
   ];
 
   const handleAddItem = () => {
@@ -65,13 +65,18 @@ export default function ImportScreen() {
       return;
     }
 
-    const newItem: ImportItem = {
+    if (parseInt(quantity) > selectedProduct.quantity) {
+      Alert.alert('Thông báo', `Không đủ hàng trong kho. Tồn kho: ${selectedProduct.quantity} ${selectedProduct.unit}`);
+      return;
+    }
+
+    const newItem: OrderItem = {
       product: selectedProduct,
       quantity: parseInt(quantity),
       note: itemNote,
     };
 
-    setImportItems([...importItems, newItem]);
+    setOrderItems([...orderItems, newItem]);
     setSelectedProduct(null);
     setQuantity('');
     setItemNote('');
@@ -88,9 +93,9 @@ export default function ImportScreen() {
           text: 'Xóa',
           style: 'destructive',
           onPress: () => {
-            const newItems = [...importItems];
+            const newItems = [...orderItems];
             newItems.splice(index, 1);
-            setImportItems(newItems);
+            setOrderItems(newItems);
           },
         },
       ]
@@ -98,41 +103,41 @@ export default function ImportScreen() {
   };
 
   const calculateTotal = () => {
-    return importItems.reduce((sum, item) => {
+    return orderItems.reduce((sum, item) => {
       return sum + (item.product.price * item.quantity);
     }, 0);
   };
 
   const handleSubmit = () => {
-    if (!supplier.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập tên nhà cung cấp');
+    if (!customer.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập tên khách hàng');
       return;
     }
 
-    if (!invoiceNumber.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập số hóa đơn');
+    if (!orderNumber.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập số đơn hàng');
       return;
     }
 
-    if (importItems.length === 0) {
+    if (orderItems.length === 0) {
       Alert.alert('Thông báo', 'Vui lòng thêm ít nhất một sản phẩm');
       return;
     }
 
     Alert.alert(
-      'Xác nhận nhập kho',
+      'Xác nhận tạo đơn hàng',
       `Tổng giá trị: ${formatCurrency(calculateTotal())}`,
       [
         { text: 'Hủy', style: 'cancel' },
         {
           text: 'Xác nhận',
           onPress: () => {
-            Alert.alert('Thành công', 'Đã tạo phiếu nhập kho thành công!');
+            Alert.alert('Thành công', 'Đã tạo đơn hàng thành công!');
             // Reset form
-            setSupplier('');
-            setInvoiceNumber('');
+            setCustomer('');
+            setOrderNumber('');
             setNote('');
-            setImportItems([]);
+            setOrderItems([]);
           },
         },
       ]
@@ -154,65 +159,65 @@ export default function ImportScreen() {
       >
         {/* Form thông tin chung */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin phiếu nhập</Text>
+          <Text style={styles.sectionTitle}>Thông tin đơn hàng</Text>
 
-          {/* Nhà cung cấp */}
+          {/* Khách hàng */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Nhà cung cấp <Text style={styles.required}>*</Text>
+              Khách hàng <Text style={styles.required}>*</Text>
             </Text>
             <View style={[
               styles.inputWrapper,
-              supplierFocused && styles.inputWrapperFocused
+              customerFocused && styles.inputWrapperFocused
             ]}>
               <Ionicons 
-                name="business-outline" 
+                name="person-outline" 
                 size={20} 
-                color={supplierFocused ? '#4CAF50' : '#999'} 
+                color={customerFocused ? '#FF9800' : '#999'} 
                 style={styles.inputIcon} 
               />
               <TextInput
                 style={styles.input}
-                placeholder="Nhập tên nhà cung cấp"
+                placeholder="Nhập tên khách hàng"
                 placeholderTextColor="#999"
-                value={supplier}
-                onChangeText={setSupplier}
-                onFocus={() => setSupplierFocused(true)}
-                onBlur={() => setSupplierFocused(false)}
+                value={customer}
+                onChangeText={setCustomer}
+                onFocus={() => setCustomerFocused(true)}
+                onBlur={() => setCustomerFocused(false)}
               />
             </View>
           </View>
 
-          {/* Số hóa đơn & Ngày nhập */}
+          {/* Số đơn hàng & Ngày */}
           <View style={styles.row}>
             <View style={[styles.inputGroup, styles.flex1]}>
               <Text style={styles.label}>
-                Số hóa đơn <Text style={styles.required}>*</Text>
+                Số đơn hàng <Text style={styles.required}>*</Text>
               </Text>
               <View style={[
                 styles.inputWrapper,
-                invoiceFocused && styles.inputWrapperFocused
+                orderFocused && styles.inputWrapperFocused
               ]}>
                 <Ionicons 
-                  name="document-text-outline" 
+                  name="receipt-outline" 
                   size={20} 
-                  color={invoiceFocused ? '#4CAF50' : '#999'} 
+                  color={orderFocused ? '#FF9800' : '#999'} 
                   style={styles.inputIcon} 
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Số HĐ"
+                  placeholder="Số ĐH"
                   placeholderTextColor="#999"
-                  value={invoiceNumber}
-                  onChangeText={setInvoiceNumber}
-                  onFocus={() => setInvoiceFocused(true)}
-                  onBlur={() => setInvoiceFocused(false)}
+                  value={orderNumber}
+                  onChangeText={setOrderNumber}
+                  onFocus={() => setOrderFocused(true)}
+                  onBlur={() => setOrderFocused(false)}
                 />
               </View>
             </View>
 
             <View style={[styles.inputGroup, styles.flex1, { marginLeft: 10 }]}>
-              <Text style={styles.label}>Ngày nhập</Text>
+              <Text style={styles.label}>Ngày đơn</Text>
               <View style={styles.inputWrapper}>
                 <Ionicons 
                   name="calendar-outline" 
@@ -220,7 +225,7 @@ export default function ImportScreen() {
                   color="#999" 
                   style={styles.inputIcon} 
                 />
-                <Text style={styles.dateText}>{importDate}</Text>
+                <Text style={styles.dateText}>{orderDate}</Text>
               </View>
             </View>
           </View>
@@ -255,22 +260,22 @@ export default function ImportScreen() {
               style={styles.addButton}
               onPress={() => setShowProductModal(true)}
             >
-              <Ionicons name="add-circle" size={20} color="#4CAF50" />
+              <Ionicons name="add-circle" size={20} color="#FF9800" />
               <Text style={styles.addButtonText}>Thêm SP</Text>
             </TouchableOpacity>
           </View>
 
-          {importItems.length === 0 ? (
+          {orderItems.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="cube-outline" size={60} color="#BDBDBD" />
               <Text style={styles.emptyText}>Chưa có sản phẩm nào</Text>
               <Text style={styles.emptySubtext}>
-                Nhấn "Thêm SP" để thêm sản phẩm
+                Nhấn "Thêm SP" để thêm sản phẩm vào đơn hàng
               </Text>
             </View>
           ) : (
             <View style={styles.itemsList}>
-              {importItems.map((item, index) => (
+              {orderItems.map((item, index) => (
                 <View key={index} style={styles.itemCard}>
                   <View style={styles.itemHeader}>
                     <View style={styles.itemInfo}>
@@ -302,12 +307,12 @@ export default function ImportScreen() {
         </View>
 
         {/* Tổng cộng */}
-        {importItems.length > 0 && (
+        {orderItems.length > 0 && (
           <View style={styles.totalSection}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Tổng số lượng:</Text>
               <Text style={styles.totalValue}>
-                {importItems.reduce((sum, item) => sum + item.quantity, 0)} sản phẩm
+                {orderItems.reduce((sum, item) => sum + item.quantity, 0)} sản phẩm
               </Text>
             </View>
             <View style={styles.totalRow}>
@@ -323,7 +328,7 @@ export default function ImportScreen() {
           onPress={handleSubmit}
         >
           <Ionicons name="checkmark-circle" size={24} color="#fff" />
-          <Text style={styles.submitButtonText}>Tạo phiếu nhập kho</Text>
+          <Text style={styles.submitButtonText}>Tạo đơn hàng</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -337,7 +342,7 @@ export default function ImportScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Thêm sản phẩm</Text>
+              <Text style={styles.modalTitle}>Chọn sản phẩm</Text>
               <TouchableOpacity onPress={() => setShowProductModal(false)}>
                 <Ionicons name="close-circle" size={28} color="#999" />
               </TouchableOpacity>
@@ -365,9 +370,17 @@ export default function ImportScreen() {
                     </View>
                     <View style={styles.productInfo}>
                       <Text style={styles.productName}>{item.name}</Text>
-                      <Text style={styles.productDetails}>
-                        Tồn kho: {item.quantity} {item.unit} • {formatCurrency(item.price)}
-                      </Text>
+                      <View style={styles.productDetailsRow}>
+                        <View style={styles.stockBadge}>
+                          <Ionicons name="cube" size={14} color="#4CAF50" />
+                          <Text style={styles.stockText}>
+                            Tồn: {item.quantity} {item.unit}
+                          </Text>
+                        </View>
+                        <Text style={styles.productPrice}>
+                          {formatCurrency(item.price)}
+                        </Text>
+                      </View>
                     </View>
                   </TouchableOpacity>
                 )}
@@ -375,7 +388,9 @@ export default function ImportScreen() {
 
               {/* Số lượng */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Số lượng</Text>
+                <Text style={styles.label}>
+                  Số lượng <Text style={styles.required}>*</Text>
+                </Text>
                 <View style={styles.inputWrapper}>
                   <Ionicons name="layers-outline" size={20} color="#999" style={styles.inputIcon} />
                   <TextInput
@@ -387,6 +402,11 @@ export default function ImportScreen() {
                     onChangeText={setQuantity}
                   />
                 </View>
+                {selectedProduct && quantity && parseInt(quantity) > selectedProduct.quantity && (
+                  <Text style={styles.errorText}>
+                    ⚠️ Vượt quá tồn kho ({selectedProduct.quantity} {selectedProduct.unit})
+                  </Text>
+                )}
               </View>
 
               {/* Ghi chú */}
@@ -429,36 +449,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
-  },
-  header: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#E8F5E9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
   },
   scrollView: {
     flex: 1,
@@ -504,7 +494,7 @@ const styles = StyleSheet.create({
     height: 48,
   },
   inputWrapperFocused: {
-    borderColor: '#4CAF50',
+    borderColor: '#FF9800',
     backgroundColor: '#fff',
   },
   inputIcon: {
@@ -529,8 +519,9 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   dateText: {
-    fontSize: 15,
-    color: '#333',
+    fontSize: 14,
+    color: '#131313ff',
+    width: '100%',
   },
   row: {
     flexDirection: 'row',
@@ -541,7 +532,7 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#FFF3E0',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -549,7 +540,7 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: '#FF9800',
     marginLeft: 4,
   },
   emptyState: {
@@ -613,7 +604,7 @@ const styles = StyleSheet.create({
   itemTotal: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: '#FF9800',
   },
   totalSection: {
     backgroundColor: '#fff',
@@ -639,18 +630,18 @@ const styles = StyleSheet.create({
   totalPrice: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: '#FF9800',
   },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF9800',
     marginHorizontal: 20,
     marginVertical: 20,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#4CAF50',
+    shadowColor: '#FF9800',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -701,15 +692,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   productItemSelected: {
-    borderColor: '#4CAF50',
-    backgroundColor: '#E8F5E9',
+    borderColor: '#FF9800',
+    backgroundColor: '#FFF3E0',
   },
   radioButton: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#4CAF50',
+    borderColor: '#FF9800',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -718,7 +709,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF9800',
   },
   productInfo: {
     flex: 1,
@@ -727,11 +718,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  productDetails: {
+  productDetailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  stockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  stockText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginLeft: 4,
+  },
+  productPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF9800',
+  },
+  errorText: {
     fontSize: 12,
-    color: '#666',
+    color: '#F44336',
+    marginTop: 6,
+    marginLeft: 4,
   },
   modalFooter: {
     flexDirection: 'row',
@@ -758,7 +775,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF9800',
     alignItems: 'center',
   },
   modalAddText: {

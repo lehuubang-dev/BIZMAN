@@ -1,6 +1,8 @@
 export interface UserData {
-  name: string;
+  userId: string;
   email: string;
+  role: string;
+  name?: string;
   phone?: string;
   avatar?: string;
 }
@@ -10,10 +12,19 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface LoginData {
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  email: string;
+  role: string;
+}
+
 export interface LoginResponse {
-  token: string;
-  user: UserData;
-  message?: string;
+  success: boolean;
+  code: string;
+  message: string;
+  data: LoginData;
 }
 
 export interface SendOTPRequest {

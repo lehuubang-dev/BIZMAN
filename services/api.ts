@@ -2,8 +2,8 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { ApiError } from '../types';
 import { API_BASE_URL as ENV_API_BASE_URL } from '@env';
 
-// API Base URL from environment variable with fallback
-export const API_BASE_URL = ENV_API_BASE_URL || 'http://demoportal.ccvi.com.vn:8888/api/v1';
+// API Base URL from environment variable
+export const API_BASE_URL = ENV_API_BASE_URL;
 
 // API Configuration
 const DEFAULT_HEADERS = {
@@ -28,11 +28,17 @@ export class ApiClient {
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
-        console.log('API Request:', {
-          url: config.url,
+        console.log('🔵 API Request:', {
           method: config.method?.toUpperCase(),
-          baseURL: config.baseURL,
-          headers: config.headers,
+          url: config.url,
+          fullURL: `${config.baseURL}${config.url}`,
+          hasToken: !!this.token,
+          tokenPreview: this.token ? this.token.substring(0, 20) + '...' : 'NO TOKEN',
+          headers: {
+            'Content-Type': config.headers['Content-Type'],
+            'Authorization': config.headers.Authorization ? 'PRESENT' : 'MISSING'
+          },
+          data: config.data,
         });
         return config;
       },
@@ -62,9 +68,14 @@ export class ApiClient {
     if (error.response) {
       // Server responded with error status
       const data = error.response.data as any;
+      console.log('Full error response:', {
+        status: error.response.status,
+        data: data,
+        headers: error.response.headers,
+      });
       return {
-        message: data?.message || 'An error occurred',
-        code: data?.code,
+        message: data?.message || data?.error?.message || 'An error occurred',
+        code: data?.code || data?.error?.code,
         status: error.response.status,
       };
     } else if (error.request) {
@@ -96,8 +107,13 @@ export class ApiClient {
   }
 
   async post<T>(endpoint: string, body?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.axiosInstance.post<T>(endpoint, body, config);
-    return response.data;
+    try {
+      const response = await this.axiosInstance.post<T>(endpoint, body, config);
+      // API returns wrapped response with success, code, message, data
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   async put<T>(endpoint: string, body?: any, config?: AxiosRequestConfig): Promise<T> {

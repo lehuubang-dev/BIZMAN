@@ -7,31 +7,53 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
+    "jsEngine": "hermes",
+
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+
     "ios": {
       "supportsTablet": true
     },
+
     "android": {
+      "package": "com.lehuubang.BizMan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.lehuubang.BizMan",
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "ACCESS_WIFI_STATE"
       ]
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
+    "developmentClient": {
+      "url": "http://localhost:8081"
+    },
+
+    "experiments": {
+      "tsconfigPaths": true
+    },
+
     "plugins": [
       "./withNetworkSecurityConfig",
       [
@@ -43,11 +65,13 @@
         }
       ]
     ],
+
     "extra": {
       "eas": {
         "projectId": "568fe51b-b268-41f0-9f3a-9e06bc0cf760"
       }
     },
+
     "owner": "huubang-ccvi"
   }
 }
