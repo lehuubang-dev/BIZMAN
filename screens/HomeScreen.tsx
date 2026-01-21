@@ -14,6 +14,9 @@ import {
 } from './components/home';
 import CategoryScreen from './CategoryScreen';
 import BrandScreen from './BrandScreen';
+import GroupScreen from './GroupScreen';
+import SupplierScreen from './SupplierScreen';
+import CashFlowScreen from './CashFlowScreen';
 import { MenuItem as MenuItemType } from '../types';
 
 const { width } = Dimensions.get('window');
@@ -89,7 +92,7 @@ const menuItems: MenuItemType[] = [
   },
   {
     id: 10,
-    label: 'Thu chi',
+    label: 'Ghi nhận thu chi',
     iconName: 'cash-multiple',
     bgColor: '#DCFCE7',
     iconColor: '#22C55E',
@@ -110,17 +113,78 @@ const menuItems: MenuItemType[] = [
   },
   {
     id: 13,
-    label: 'Nhóm\nhàng hóa',
+    label: 'Nhóm hàng hóa',
     iconName: 'group',
     bgColor: '#A5F3FC',
     iconColor: '#0891B2',
   },
+   {
+  id: 14,
+  label: 'Nhà cung cấp',
+  iconName: 'handshake-outline',
+  bgColor: '#E0F2FE',
+  iconColor: '#0284C7',
+}
 ];
 
 // Main HomeScreen Component
 export default function HomeScreen() {
   const [showCategory, setShowCategory] = useState(false);
   const [showBrand, setShowBrand] = useState(false);
+  const [showGroup, setShowGroup] = useState(false);
+  const [showSupplier, setShowSupplier] = useState(false);
+  const [showCashFlow, setShowCashFlow] = useState(false);
+
+  if (showCashFlow) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowCashFlow(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Ghi nhận thu chi</Text>
+        </View>
+        <CashFlowScreen />
+      </View>
+    );
+  }
+
+  if (showSupplier) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowSupplier(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Nhà cung cấp</Text>
+        </View>
+        <SupplierScreen />
+      </View>
+    );
+  }
+
+  if (showGroup) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowGroup(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Nhóm hàng hóa</Text>
+        </View>
+        <GroupScreen />
+      </View>
+    );
+  }
 
   if (showBrand) {
     return (
@@ -164,6 +228,9 @@ export default function HomeScreen() {
           items={menuItems} 
           onCategoryPress={() => setShowCategory(true)}
           onBrandPress={() => setShowBrand(true)}
+          onGroupPress={() => setShowGroup(true)}
+          onSupplierPress={() => setShowSupplier(true)}
+          onCashFlowPress={() => setShowCashFlow(true)}
         />
       </View>
     </ScrollView>

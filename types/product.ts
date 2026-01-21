@@ -59,6 +59,9 @@ export interface Product {
   description: string;
   type: string;
   unit: string;
+  model: string;
+  partNumber: string;
+  serialNumber: string;
   costPrice: number;
   sellPrice: number;
   minStock: number;

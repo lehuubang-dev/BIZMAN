@@ -202,6 +202,60 @@ class ProductService {
   }
 
   /**
+   * Create a new product group
+   */
+  async createGroup(data: { 
+    groupId: string;
+    name: string; 
+    gtgttax: number;
+    tncnntax: number;
+    description: string;
+    jobType: string;
+  }): Promise<any> {
+    try {
+      const response = await apiClient.post<any>('/api/v1/products/create-group', data);
+      return response;
+    } catch (error) {
+      console.error('Error creating group:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing product group
+   */
+  async updateGroup(data: { 
+    id: string;
+    groupId: string;
+    name: string; 
+    gtgttax: number;
+    tncnntax: number;
+    description: string;
+    jobType: string;
+  }): Promise<any> {
+    try {
+      const response = await apiClient.post<any>('/api/v1/products/update-group', data);
+      return response;
+    } catch (error) {
+      console.error('Error updating group:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a product group
+   */
+  async deleteGroup(id: string): Promise<any> {
+    try {
+      const response = await apiClient.post<any>('/api/v1/products/delete-group', { id });
+      return response;
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get brands
    */
   async getBrands(): Promise<any[]> {

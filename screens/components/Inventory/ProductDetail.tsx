@@ -97,6 +97,9 @@ export default function ProductDetail({ productId, onClose }: ProductDetailProps
               <View style={styles.row}><Text style={styles.label}>Thương hiệu:</Text><Text style={styles.value}>{product.brand?.name}</Text></View>
               <View style={styles.row}><Text style={styles.label}>Loại:</Text><Text style={styles.value}>{product.type}</Text></View>
               <View style={styles.row}><Text style={styles.label}>Đơn vị:</Text><Text style={styles.value}>{product.unit}</Text></View>
+              {product.model ? <View style={styles.row}><Text style={styles.label}>Model:</Text><Text style={styles.value}>{product.model}</Text></View> : null}
+              {product.partNumber ? <View style={styles.row}><Text style={styles.label}>Part Number:</Text><Text style={styles.value}>{product.partNumber}</Text></View> : null}
+              {product.serialNumber ? <View style={styles.row}><Text style={styles.label}>Serial Number:</Text><Text style={styles.value}>{product.serialNumber}</Text></View> : null}
               <View style={styles.row}><Text style={styles.label}>Tồn tối thiểu:</Text><Text style={styles.value}>{product.minStock}</Text></View>
               <View style={styles.row}><Text style={styles.label}>Giá vốn:</Text><Text style={styles.value}>{Math.round(product.costPrice).toLocaleString('vi-VN')}</Text></View>
               <View style={styles.row}><Text style={styles.label}>Giá bán:</Text><Text style={[styles.value, { color: COLORS.primary, fontWeight: '700' }]}>{Math.round(product.sellPrice).toLocaleString('vi-VN')}</Text></View>
