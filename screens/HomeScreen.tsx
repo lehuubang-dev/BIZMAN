@@ -17,6 +17,9 @@ import BrandScreen from './BrandScreen';
 import GroupScreen from './GroupScreen';
 import SupplierScreen from './SupplierScreen';
 import CashFlowScreen from './CashFlowScreen';
+import WarehouseScreen from './WarehouseScreen';
+import ImportGoodScreen from './ImportGoodScreen';
+import ContractScreen from './ContractScreen';
 import { MenuItem as MenuItemType } from '../types';
 
 const { width } = Dimensions.get('window');
@@ -43,14 +46,14 @@ const menuItems: MenuItemType[] = [
   },
   {
     id: 3,
-    label: 'Nhập kho,\nxuất kho',
+    label: 'Nhập hàng',
     iconName: 'package-variant',
     bgColor: '#DCFCE7',
     iconColor: '#22C55E',
   },
   {
     id: 4,
-    label: 'Tồn kho\nbạn đầu',
+    label: 'Kho hàng',
     iconName: 'home-city',
     bgColor: '#A7F3D0',
     iconColor: '#10B981',
@@ -134,6 +137,60 @@ export default function HomeScreen() {
   const [showGroup, setShowGroup] = useState(false);
   const [showSupplier, setShowSupplier] = useState(false);
   const [showCashFlow, setShowCashFlow] = useState(false);
+  const [showWarehouse, setShowWarehouse] = useState(false);
+  const [showImportGood, setShowImportGood] = useState(false);
+  const [showContract, setShowContract] = useState(false);
+
+  if (showContract) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowContract(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Hợp đồng</Text>
+        </View>
+        <ContractScreen />
+      </View>
+    );
+  }
+
+  if (showWarehouse) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowWarehouse(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Kho hàng</Text>
+        </View>
+        <WarehouseScreen />
+      </View>
+    );
+  }
+
+  if (showImportGood) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowImportGood(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Nhập hàng</Text>
+        </View>
+        <ImportGoodScreen />
+      </View>
+    );
+  }
 
   if (showCashFlow) {
     return (
@@ -231,6 +288,9 @@ export default function HomeScreen() {
           onGroupPress={() => setShowGroup(true)}
           onSupplierPress={() => setShowSupplier(true)}
           onCashFlowPress={() => setShowCashFlow(true)}
+          onWarehousePress={() => setShowWarehouse(true)}
+          onImportGoodPress={() => setShowImportGood(true)}
+          onContractPress={() => setShowContract(true)}
         />
       </View>
     </ScrollView>

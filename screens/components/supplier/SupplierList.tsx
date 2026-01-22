@@ -141,7 +141,7 @@ export default function SupplierList({ suppliers, onUpdate, onView, onRefresh }:
             style={styles.chevron}
           />
         </TouchableOpacity>
-
+        {/* Menu thao tác */}
         {isExpanded && (
           <View style={styles.actions}>
             <TouchableOpacity
