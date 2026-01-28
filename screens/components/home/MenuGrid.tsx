@@ -23,10 +23,12 @@ interface MenuItemProps {
   onWarehousePress?: () => void;
   onImportGoodPress?: () => void;
   onContractPress?: () => void;
+  onGoodsReceiptPress?: () => void;
+  onDebtPress?: () => void;
 }
 
 // MenuItem Component
-const MenuItem = ({ item, onCategoryPress, onBrandPress, onGroupPress, onSupplierPress, onCashFlowPress, onWarehousePress, onImportGoodPress, onContractPress }: MenuItemProps) => {
+const MenuItem = ({ item, onCategoryPress, onBrandPress, onGroupPress, onSupplierPress, onCashFlowPress, onWarehousePress, onImportGoodPress, onContractPress, onGoodsReceiptPress, onDebtPress }: MenuItemProps) => {
   const handlePress = () => {
     if (item.label === 'Danh mục' && onCategoryPress) {
       onCategoryPress();
@@ -44,6 +46,10 @@ const MenuItem = ({ item, onCategoryPress, onBrandPress, onGroupPress, onSupplie
       onImportGoodPress();
     } else if (item.label === 'Hợp đồng' && onContractPress) {
       onContractPress();
+    } else if (item.label.includes('Phiếu nhập') && onGoodsReceiptPress) {
+      onGoodsReceiptPress();
+    } else if (item.label.includes('Công nợ') && onDebtPress) {
+      onDebtPress();
     }
     // Add more handlers here for other menu items
   };
@@ -74,10 +80,12 @@ interface MenuGridProps {
   onWarehousePress?: () => void;
   onImportGoodPress?: () => void;
   onContractPress?: () => void;
+  onGoodsReceiptPress?: () => void;
+  onDebtPress?: () => void;
 }
 
 // MenuGrid Component
-export const MenuGrid = ({ items, onCategoryPress, onBrandPress, onGroupPress, onSupplierPress, onCashFlowPress, onWarehousePress, onImportGoodPress, onContractPress }: MenuGridProps) => {
+export const MenuGrid = ({ items, onCategoryPress, onBrandPress, onGroupPress, onSupplierPress, onCashFlowPress, onWarehousePress, onImportGoodPress, onContractPress, onGoodsReceiptPress, onDebtPress }: MenuGridProps) => {
   const ITEMS_PER_PAGE = 9;
   const pageCount = Math.ceil(items.length / ITEMS_PER_PAGE);
   const pages = [];
@@ -94,7 +102,7 @@ export const MenuGrid = ({ items, onCategoryPress, onBrandPress, onGroupPress, o
       <View style={styles.menuGridContainer}>
         <View style={styles.menuGrid}>
           {items.map((item) => (
-            <MenuItem key={item.id} item={item} onCategoryPress={onCategoryPress} onBrandPress={onBrandPress} onGroupPress={onGroupPress} onSupplierPress={onSupplierPress} onCashFlowPress={onCashFlowPress} onWarehousePress={onWarehousePress} onImportGoodPress={onImportGoodPress} onContractPress={onContractPress} />
+            <MenuItem key={item.id} item={item} onCategoryPress={onCategoryPress} onBrandPress={onBrandPress} onGroupPress={onGroupPress} onSupplierPress={onSupplierPress} onCashFlowPress={onCashFlowPress} onWarehousePress={onWarehousePress} onImportGoodPress={onImportGoodPress} onContractPress={onContractPress} onGoodsReceiptPress={onGoodsReceiptPress} onDebtPress={onDebtPress} />
           ))}
         </View>
       </View>
@@ -113,7 +121,7 @@ export const MenuGrid = ({ items, onCategoryPress, onBrandPress, onGroupPress, o
         {pages.map((pageItems, pageIndex) => (
           <View key={pageIndex} style={[styles.menuGrid, { width: width - PADDING * 4 }]}>
             {pageItems.map((item) => (
-              <MenuItem key={item.id} item={item} onCategoryPress={onCategoryPress} onBrandPress={onBrandPress} onGroupPress={onGroupPress} onSupplierPress={onSupplierPress} onCashFlowPress={onCashFlowPress} onWarehousePress={onWarehousePress} onImportGoodPress={onImportGoodPress} onContractPress={onContractPress} />
+              <MenuItem key={item.id} item={item} onCategoryPress={onCategoryPress} onBrandPress={onBrandPress} onGroupPress={onGroupPress} onSupplierPress={onSupplierPress} onCashFlowPress={onCashFlowPress} onWarehousePress={onWarehousePress} onImportGoodPress={onImportGoodPress} onContractPress={onContractPress} onGoodsReceiptPress={onGoodsReceiptPress} onDebtPress={onDebtPress} />
             ))}
           </View>
         ))}

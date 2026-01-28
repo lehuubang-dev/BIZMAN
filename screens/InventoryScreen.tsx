@@ -101,6 +101,7 @@ const InventoryScreen = () => {
         onSelectProduct={handleSelectProduct}
         onUpdateProduct={handleUpdateProduct}
         refreshTrigger={refreshTrigger}
+        searchKeyword={searchText}
       />
 
       {/* Bottom Action Buttons */}

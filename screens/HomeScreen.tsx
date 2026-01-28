@@ -20,6 +20,8 @@ import CashFlowScreen from './CashFlowScreen';
 import WarehouseScreen from './WarehouseScreen';
 import ImportGoodScreen from './ImportGoodScreen';
 import ContractScreen from './ContractScreen';
+import GoodsReceiptScreen from './GoodsReceiptScreen';
+import DebtScreen from './DebtScreen';
 import { MenuItem as MenuItemType } from '../types';
 
 const { width } = Dimensions.get('window');
@@ -67,10 +69,10 @@ const menuItems: MenuItemType[] = [
   },
   {
     id: 6,
-    label: 'Số kế toán',
-    iconName: 'chart-bar',
-    bgColor: '#FECACA',
-    iconColor: '#DC2626',
+    label: 'Phiếu nhập\n hàng',
+    iconName: 'clipboard-arrow-down-outline',
+    bgColor: '#DCFCE7',
+    iconColor: '#16A34A',
   },
   {
     id: 7,
@@ -81,10 +83,10 @@ const menuItems: MenuItemType[] = [
   },
   {
     id: 8,
-    label: 'Hướng dẫn',
-    iconName: 'robot-happy',
-    bgColor: '#A5F3FC',
-    iconColor: '#0891B2',
+    label: 'Công nợ',
+    iconName: 'book-clock-outline',
+    bgColor: '#E0E7FF',
+    iconColor: '#4338CA',
   },
   {
     id: 9,
@@ -140,6 +142,25 @@ export default function HomeScreen() {
   const [showWarehouse, setShowWarehouse] = useState(false);
   const [showImportGood, setShowImportGood] = useState(false);
   const [showContract, setShowContract] = useState(false);
+  const [showGoodsReceipt, setShowGoodsReceipt] = useState(false);
+  const [showDebt, setShowDebt] = useState(false);
+
+  if (showDebt) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowDebt(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Công nợ</Text>
+        </View>
+        <DebtScreen />
+      </View>
+    );
+  }
 
   if (showContract) {
     return (
@@ -154,6 +175,23 @@ export default function HomeScreen() {
           <Text style={styles.categoryTitle}>Hợp đồng</Text>
         </View>
         <ContractScreen />
+      </View>
+    );
+  }
+
+  if (showGoodsReceipt) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.backHeader}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => setShowGoodsReceipt(false)}
+          >
+            <MaterialCommunityIcons name="close" size={26} color="#2196F3" />
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>Phiếu nhập hàng</Text>
+        </View>
+        <GoodsReceiptScreen />
       </View>
     );
   }
@@ -291,6 +329,8 @@ export default function HomeScreen() {
           onWarehousePress={() => setShowWarehouse(true)}
           onImportGoodPress={() => setShowImportGood(true)}
           onContractPress={() => setShowContract(true)}
+          onGoodsReceiptPress={() => setShowGoodsReceipt(true)}
+          onDebtPress={() => setShowDebt(true)}
         />
       </View>
     </ScrollView>

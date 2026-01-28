@@ -32,9 +32,14 @@ export default function ImportGoodScreen() {
   const loadOrders = async () => {
     setLoading(true);
     try {
+      console.log('Loading purchase orders...');
       const data = await purchaseOrderService.getPurchaseOrders();
+      console.log('Loaded orders count:', data.length);
+      // API already returns data sorted by orderDate descending
+      console.log('Newest order:', data[0]?.orderNumber);
       setOrders(data);
     } catch (error) {
+      console.error('Failed to load orders:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách đơn nhập hàng');
     } finally {
       setLoading(false);
@@ -62,8 +67,11 @@ export default function ImportGoodScreen() {
 };
 
   const handleCreate = async () => {
+    console.log('handleCreate called - refreshing order list...');
     setShowCreate(false);
     await loadOrders();
+    // Note: orders state will be updated by loadOrders, but the log here shows old value
+    // The actual updated count is logged in loadOrders itself
   };
 
 

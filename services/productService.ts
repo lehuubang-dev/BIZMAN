@@ -35,6 +35,38 @@ class ProductService {
   }
 
   /**
+   * Search products by keyword
+   */
+  async searchProducts(keyword: string): Promise<Product[]> {
+    try {
+      if (!keyword || !keyword.trim()) {
+        return this.getProducts();
+      }
+      
+      const response = await apiClient.get<any>(
+        `/api/v1/products/search-products?search=${encodeURIComponent(keyword)}`
+      );
+      console.log('Search Products API Response:', response);
+      
+      // Handle different response formats
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        return response.data.content;
+      }
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      return [];
+    } catch (error: any) {
+      console.error('Error searching products:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get products formatted for display
    * Shows only: primary image, name, unit, type, sellPrice, active
    */
@@ -330,6 +362,66 @@ class ProductService {
     } catch (error) {
       console.error('Error updating product:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Upload image for product - supports both upload endpoints
+   */
+  async uploadImage(file: any): Promise<string> {
+    try {
+      console.log('Uploading image:', { name: file.name, type: file.mimeType, uri: file.uri });
+      
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        type: file.mimeType || 'image/jpeg',
+        name: file.name,
+      } as any);
+      
+      // Try /api/v1/user/upload-document first
+      try {
+        const response = await apiClient.post<any>('/api/v1/user/upload-document', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        
+        console.log('Image upload response (/upload-document):', response);
+        
+        // Handle different response formats
+        if (response?.id) return response.id;
+        if (response?.filePath) return response.filePath;
+        if (typeof response?.data === 'string') return response.data;
+        if (response?.data?.id) return response.data.id;
+        if (response?.data?.filePath) return response.data.filePath;
+        if (response?.data?.path) return response.data.path;
+        if (response?.data) return String(response.data);
+      } catch (uploadError: any) {
+        console.warn('Upload via /upload-document failed, trying /uploads:', uploadError);
+        
+        // Fallback to /api/v1/user/uploads
+        const fallbackResponse = await apiClient.post<any>('/api/v1/user/uploads?file', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        
+        console.log('Image upload response (/uploads):', fallbackResponse);
+        
+        if (typeof fallbackResponse?.data === 'string') return fallbackResponse.data;
+        if (fallbackResponse?.data?.id) return fallbackResponse.data.id;
+        if (fallbackResponse?.data?.filePath) return fallbackResponse.data.filePath;
+        if (fallbackResponse?.data) return String(fallbackResponse.data);
+      }
+      
+      throw new Error('Không thể xử lý phản hồi từ server');
+    } catch (error: any) {
+      console.error('Image upload error:', error);
+      if (error?.response) {
+        console.error('Error response:', error.response);
+      }
+      throw new Error(error?.message || 'Không thể tải ảnh lên');
     }
   }
 }

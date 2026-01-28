@@ -12,7 +12,7 @@ export interface Product {
   type: string;
   sellPrice: number;
   active: boolean;
-  imageUrl?: string | number;
+  imageUrl?: string | null;
 }
 
 interface ProductListProps {
@@ -20,6 +20,7 @@ interface ProductListProps {
   onSelectProduct: (product: Product) => void;
   onUpdateProduct?: (product: Product) => void;
   refreshTrigger?: number;
+  searchKeyword?: string;
 }
 
 export const ProductList: React.FC<ProductListProps> = ({
@@ -27,6 +28,7 @@ export const ProductList: React.FC<ProductListProps> = ({
   onSelectProduct,
   onUpdateProduct,
   refreshTrigger,
+  searchKeyword,
 }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,7 @@ export const ProductList: React.FC<ProductListProps> = ({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (keyword?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -43,20 +45,30 @@ export const ProductList: React.FC<ProductListProps> = ({
         setError('Bạn cần đăng nhập để xem sản phẩm (403). ');
         return;
       }
-      // Use productService to fetch and format products for display
-      const displayProducts = await productService.getProductsForDisplay();
-      const mapped: Product[] = displayProducts.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        unit: p.unit,
-        type: p.type,
-        sellPrice: Math.round(p.sellPrice),
-        active: p.active,
-        imageUrl: p.image || require('../../../assets/default_image.svg'),
-      }));
+      
+      // Use search API if keyword is provided, otherwise get all products
+      let allProducts;
+      if (keyword && keyword.trim()) {
+        console.log('Searching products with keyword:', keyword);
+        allProducts = await productService.searchProducts(keyword);
+      } else {
+        allProducts = await productService.getProducts();
+      }
+      
+      const mapped: Product[] = allProducts.map((p: any) => {
+        const primaryImage = p.images?.find((img: any) => img.isPrimary)?.imageUrl;
+        return {
+          id: p.id,
+          name: p.name,
+          unit: p.unit,
+          type: p.type,
+          sellPrice: Math.round(p.sellPrice),
+          active: p.active,
+          imageUrl: primaryImage || null,
+        };
+      });
       setProducts(mapped);
     } catch (e: any) {
-      // Handle ApiError from interceptor
       if (e?.status === 403) {
         setError('Không có quyền truy cập (403). Vui lòng đăng nhập lại.');
       } else {
@@ -67,9 +79,14 @@ export const ProductList: React.FC<ProductListProps> = ({
     }
   };
 
+  // Combined effect for refresh and search with debounce
   useEffect(() => {
-    fetchProducts();
-  }, [refreshTrigger]);
+    const timeoutId = setTimeout(() => {
+      fetchProducts(searchKeyword);
+    }, searchKeyword ? 300 : 0); // Debounce only when searching
+
+    return () => clearTimeout(timeoutId);
+  }, [refreshTrigger, searchKeyword]);
 
   const handleToggleExpanded = (id: string) => {
     setExpandedId(prev => (prev === id ? null : id));
@@ -92,105 +109,143 @@ export const ProductList: React.FC<ProductListProps> = ({
     }
   };
 
-  const renderProductItem = ({ item }: { item: Product }) => (
-    <TouchableOpacity
-      style={styles.productItemCard}
-      onPress={() => handleToggleExpanded(item.id)}
-      activeOpacity={0.8}
-    >
-      <View style={styles.productItemContent}>
-        <View style={styles.productImageContainer}>
-          <View style={styles.productImageBox}>
-            {item.imageUrl ? (
-              <Image 
-                source={typeof item.imageUrl === 'string' ? { uri: item.imageUrl } : item.imageUrl} 
-                style={styles.productImage} 
-              />
-            ) : (
-              <View style={styles.productImagePlaceholder}>
-                <MaterialCommunityIcons name="image-off" size={24} color={COLORS.gray400} />
+  const getTypeConfig = (type: string) => {
+    const configs: Record<string, { color: string; icon: string }> = {
+      PRODUCT: { color: '#10B981', icon: 'package-variant' },
+      SERVICE: { color: '#2196F3', icon: 'hand-heart' },
+      MATERIAL: { color: '#F59E0B', icon: 'flask' },
+    };
+    return configs[type] || { color: '#6B7280', icon: 'cube' };
+  };
+
+  const renderProductItem = ({ item }: { item: Product }) => {
+    const isExpanded = expandedId === item.id;
+    const isSelected = selectedItems.some(p => p.id === item.id);
+    const typeConfig = getTypeConfig(item.type);
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.productCard,
+          isSelected && styles.productCardSelected,
+          !item.active && styles.productCardInactive
+        ]}
+        onPress={() => handleToggleExpanded(item.id)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.cardContent}>
+          {/* Image Section */}
+          <View style={styles.imageSection}>
+            <View style={styles.imageWrapper}>
+              {item.imageUrl ? (
+                <Image 
+                  source={{ uri: item.imageUrl }}
+                  style={styles.productImage}
+                  defaultSource={require('../../../assets/default_image.svg')}
+                />
+              ) : (
+                <Image 
+                  source={require('../../../assets/default_image.svg')}
+                  style={styles.productImage}
+                />
+              )}
+              {/* Status dot */}
+              <View style={[
+                styles.statusDot,
+                item.active ? styles.statusDotActive : styles.statusDotInactive
+              ]} />
+              {/* Selection badge */}
+              {isSelected && (
+                <View style={styles.selectionBadge}>
+                  <MaterialCommunityIcons name="check-circle" size={20} color={COLORS.primary} />
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Info Section */}
+          <View style={styles.infoSection}>
+            <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
+            
+            <View style={styles.metaRow}>
+              <View style={[styles.typeBadge, { backgroundColor: typeConfig.color + '15' }]}>
+                <MaterialCommunityIcons 
+                  name={typeConfig.icon as any}
+                  size={12} 
+                  color={typeConfig.color} 
+                />
+                <Text style={[styles.typeText, { color: typeConfig.color }]}>
+                  {item.type}
+                </Text>
               </View>
-            )}
+              <View style={styles.unitBadge}>
+                <MaterialCommunityIcons name="package-variant" size={12} color={COLORS.gray600} />
+                <Text style={styles.unitText}>{item.unit}</Text>
+              </View>
+            </View>
+
+            <View style={styles.priceRow}>
+              <MaterialCommunityIcons name="cash" size={16} color={COLORS.primary} />
+              <Text style={styles.price}>{item.sellPrice.toLocaleString('vi-VN')}</Text>
+            </View>
           </View>
-          {/* Active/Inactive badge on image */}
-          <View style={[styles.imageStatusBadge, item.active ? styles.imageStatusActive : styles.imageStatusInactive]}>
+
+          {/* Expand Icon */}
+          <View style={styles.expandIcon}>
             <MaterialCommunityIcons 
-              name={item.active ? "check" : "close"} 
-              size={12} 
-              color={COLORS.white} 
+              name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+              size={20} 
+              color={COLORS.gray400} 
             />
           </View>
         </View>
 
-        <View style={styles.productDetailsBox}>
-          <Text style={styles.productName}>{item.name}</Text>
-          <View style={styles.productMetaContainer}>
-            <View style={styles.metaRow}>
-              <MaterialCommunityIcons name="package-variant" size={14} color={COLORS.gray600} />
-              <Text style={styles.productMeta}>{item.unit}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <MaterialCommunityIcons name="tag" size={14} color={COLORS.gray600} />
-              <Text style={styles.productMeta}>{item.type}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.productPriceBox}>
-          <Text style={styles.productPrice}>{item.sellPrice.toLocaleString('vi-VN')}</Text>
-          {selectedItems.some(p => p.id === item.id) && (
-            <View style={styles.checkmark}>
-              <MaterialCommunityIcons
-                name="check"
-                size={18}
-                color={COLORS.white}
-              />
-            </View>
-          )}
-        </View>
-      </View>
-      {/* Menu thao tác */}
-      {expandedId === item.id && (
-        <View style={styles.actionsBar}>
-          <TouchableOpacity
-            onPress={() => handleToggleActive(item)}
-            style={[styles.actionButton, item.active ? styles.deactivateBtn : styles.activateBtn]}
-            disabled={actionLoadingId === item.id}
-          >
-            <MaterialCommunityIcons
-              name={item.active ? 'close-circle-outline' : 'check-circle-outline'}
-              size={18}
-              color={item.active ? '#DC2626' : '#16A34A'}
-            />
-            <Text style={[styles.actionText, { color: item.active ? '#DC2626' : '#16A34A' }]}>
-              {item.active ? 'Ngừng kích hoạt' : 'Kích hoạt'}
-            </Text>
-          </TouchableOpacity>
-          {onUpdateProduct && (
+        {/* Actions */}
+        {isExpanded && (
+          <View style={styles.actionsContainer}>
             <TouchableOpacity
-              onPress={() => onUpdateProduct(item)}
-              style={[styles.actionButton, styles.updateBtn]}
+              onPress={() => onSelectProduct(item)}
+              style={[styles.actionBtn, styles.viewBtn]}
             >
-              <MaterialCommunityIcons name="pencil-outline" size={18} color="#F59E0B" />
-              <Text style={[styles.actionText, { color: '#F59E0B' }]}>Cập nhật</Text>
+              <MaterialCommunityIcons name="eye-outline" size={18} color={COLORS.primary} />
+              <Text style={[styles.actionText, { color: COLORS.primary }]}>Chi tiết</Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            onPress={() => onSelectProduct(item)}
-            style={styles.actionButton}
-          >
-            <MaterialCommunityIcons name="information-outline" size={18} color={COLORS.primary} />
-            <Text style={[styles.actionText, { color: COLORS.primary }]}>Xem</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+
+            {onUpdateProduct && (
+              <TouchableOpacity
+                onPress={() => onUpdateProduct(item)}
+                style={[styles.actionBtn, styles.updateBtn]}
+              >
+                <MaterialCommunityIcons name="pencil-outline" size={18} color="#F59E0B" />
+                <Text style={[styles.actionText, { color: '#F59E0B' }]}>Cập nhật</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              onPress={() => handleToggleActive(item)}
+              style={[styles.actionBtn, item.active ? styles.deactivateBtn : styles.activateBtn]}
+              disabled={actionLoadingId === item.id}
+            >
+              <MaterialCommunityIcons
+                name={item.active ? 'pause-circle-outline' : 'play-circle-outline'}
+                size={18}
+                color={item.active ? '#DC2626' : '#16A34A'}
+              />
+              <Text style={[styles.actionText, { color: item.active ? '#DC2626' : '#16A34A' }]}>
+                {item.active ? 'Tạm ngừng' : 'Kích hoạt'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <Text>Đang tải danh sách sản phẩm... </Text>
+        <MaterialCommunityIcons name="loading" size={40} color={COLORS.primary} />
+        <Text style={styles.loadingText}>Đang tải danh sách sản phẩm...</Text>
       </View>
     );
   }
@@ -198,17 +253,11 @@ export const ProductList: React.FC<ProductListProps> = ({
   if (error) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={{ color: 'red', marginBottom: 12 }}>{error}</Text>
-        <TouchableOpacity
-          style={{
-            backgroundColor: COLORS.primary,
-            paddingVertical: 10,
-            paddingHorizontal: 14,
-            borderRadius: 8,
-          }}
-          onPress={fetchProducts}
-        >
-          <Text style={{ color: 'white', fontWeight: '700' }}>Thử lại</Text>
+        <MaterialCommunityIcons name="alert-circle" size={48} color={COLORS.primary} />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => fetchProducts()}>
+          <MaterialCommunityIcons name="refresh" size={18} color={COLORS.white} />
+          <Text style={styles.retryText}>Thử lại</Text>
         </TouchableOpacity>
       </View>
     );
@@ -216,12 +265,19 @@ export const ProductList: React.FC<ProductListProps> = ({
 
   return (
     <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-      <View style={styles.productsSection}>
+      <View style={styles.listContainer}>
         <FlatList
           data={products}
           scrollEnabled={false}
           keyExtractor={(item) => item.id}
           renderItem={renderProductItem}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="package-variant-closed" size={64} color={COLORS.gray400} />
+              <Text style={styles.emptyText}>Chưa có sản phẩm nào</Text>
+            </View>
+          }
         />
       </View>
     </ScrollView>
@@ -231,130 +287,188 @@ export const ProductList: React.FC<ProductListProps> = ({
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
+    backgroundColor: '#F9FAFB',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 60,
   },
-  productsSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: COLORS.gray600,
+    fontWeight: '500',
   },
-  productItemCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    overflow: 'hidden',
+  errorText: {
+    marginTop: 16,
+    marginBottom: 20,
+    fontSize: 14,
+    color: COLORS.primary,
+    textAlign: 'center',
+    fontWeight: '500',
   },
-  productItemContent: {
+  retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
   },
-  productImageContainer: {
-    position: 'relative',
-    marginRight: 14,
+  retryText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 14,
   },
-  productImageBox: {
-    width: 60,
-    height: 60,
+  listContainer: {
+    padding: 12,
+  },
+  productCard: {
+    backgroundColor: COLORS.white,
     borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
-    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  productCardSelected: {
+    borderColor: COLORS.primary,
+    borderWidth: 2,
+    backgroundColor: COLORS.primary + '05',
+  },
+  productCardInactive: {
+    opacity: 0.6,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    padding: 12,
     alignItems: 'center',
+  },
+  imageSection: {
+    marginRight: 12,
+  },
+  imageWrapper: {
+    position: 'relative',
+    width: 70,
+    height: 70,
   },
   productImage: {
-    width: 60,
-    height: 60,
+    width: 70,
+    height: 70,
     borderRadius: 12,
   },
-  productImagePlaceholder: {
-    width: 60,
-    height: 60,
+  imagePlaceholder: {
+    width: 70,
+    height: 70,
     borderRadius: 12,
-    backgroundColor: COLORS.gray100,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageStatusBadge: {
+  statusDot: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
+    bottom: 4,
+    right: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     borderWidth: 2,
     borderColor: COLORS.white,
   },
-  imageStatusActive: {
-    backgroundColor: '#16A34A',
+  statusDotActive: {
+    backgroundColor: '#10B981',
   },
-  imageStatusInactive: {
+  statusDotInactive: {
     backgroundColor: '#DC2626',
   },
-  productDetailsBox: {
+  selectionBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+  },
+  infoSection: {
     flex: 1,
     justifyContent: 'center',
   },
   productName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: COLORS.gray800,
-    marginBottom: 6,
-  },
-  productMetaContainer: {
-    gap: 4,
+    color: '#1F2937',
+    marginBottom: 8,
+    lineHeight: 20,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginBottom: 8,
   },
-  productMeta: {
-    fontSize: 12,
-    color: COLORS.gray600,
-    fontWeight: '600',
-  },
-  productPriceBox: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  checkmark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionsBar: {
+  typeBadge: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 12,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-  actionButton: {
+  typeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  unitBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+  },
+  unitText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  price: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  expandIcon: {
+    marginLeft: 8,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    paddingHorizontal: 10,
+    gap: 8,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 9,
     borderRadius: 8,
-    backgroundColor: COLORS.gray100,
+  },
+  viewBtn: {
+    backgroundColor: COLORS.primary + '10',
+  },
+  updateBtn: {
+    backgroundColor: '#FEF3C7',
   },
   activateBtn: {
     backgroundColor: '#ECFDF5',
@@ -362,11 +476,21 @@ const styles = StyleSheet.create({
   deactivateBtn: {
     backgroundColor: '#FEF2F2',
   },
-  updateBtn: {
-    backgroundColor: '#FEF3C7',
-  },
   actionText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  separator: {
+    height: 10,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: COLORS.gray600,
+    fontWeight: '500',
   },
 });

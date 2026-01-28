@@ -290,5 +290,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: COLORS.gray600,
+    width: '100%',
+    textAlign: 'center',
   },
 });
