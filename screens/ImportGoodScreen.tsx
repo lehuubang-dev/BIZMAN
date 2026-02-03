@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
+  Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -15,11 +17,16 @@ const COLORS = {
   primary: '#2196F3',
   white: '#FFFFFF',
   gray50: '#F9FAFB',
+  gray200: '#E5E7EB',
+  gray400: '#9CA3AF',
+  gray600: '#4B5563',
+  gray800: '#1F2937',
 };
 
 export default function ImportGoodScreen() {
   const [orders, setOrders] = useState<PurchaseOrderListItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [showDetail, setShowDetail] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
@@ -28,6 +35,19 @@ export default function ImportGoodScreen() {
   useEffect(() => {
     loadOrders();
   }, []);
+
+  // Auto search with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchKeyword.trim()) {
+        handleSearch();
+      } else {
+        loadOrders();
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchKeyword]);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -41,6 +61,26 @@ export default function ImportGoodScreen() {
     } catch (error) {
       console.error('Failed to load orders:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách đơn nhập hàng');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchKeyword.trim()) {
+      loadOrders();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('Searching orders with keyword:', searchKeyword);
+      const data = await purchaseOrderService.searchPurchaseOrders(searchKeyword);
+      console.log('Search results count:', data.length);
+      setOrders(data);
+    } catch (error) {
+      console.error('Search error:', error);
+      Alert.alert('Lỗi', 'Không thể tìm kiếm đơn hàng');
     } finally {
       setLoading(false);
     }
@@ -86,6 +126,28 @@ export default function ImportGoodScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <MaterialCommunityIcons name="magnify" size={20} color={COLORS.gray400} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm đơn hàng..."
+            value={searchKeyword}
+            onChangeText={setSearchKeyword}
+            returnKeyType="search"
+          />
+          {searchKeyword.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchKeyword('')}>
+              <MaterialCommunityIcons name="close-circle" size={20} color={COLORS.gray400} />
+            </TouchableOpacity>
+          )}
+          {loading && searchKeyword.length > 0 && (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 8 }} />
+          )}
+        </View>
+      </View>
+
       <ImportGoodList
         orders={orders}
         onView={handleView}
@@ -125,5 +187,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.gray50,
+  },
+  searchContainer: {
+    backgroundColor: COLORS.white,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.gray50,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: COLORS.gray800,
+    minHeight: 40,
+    paddingVertical: 8,
   },
 });

@@ -49,6 +49,19 @@ export default function PurchaseDebtList({ onViewDetail }: PurchaseDebtListProps
     filterDebts();
   }, [debts, statusFilter]);
 
+  // Auto search with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchKeyword.trim()) {
+        handleSearch();
+      } else {
+        loadDebts();
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchKeyword]);
+
   const loadDebts = async () => {
     setLoading(true);
     try {
@@ -247,19 +260,18 @@ export default function PurchaseDebtList({ onViewDetail }: PurchaseDebtListProps
             placeholder="Tìm kiếm theo nhà cung cấp..."
             value={searchKeyword}
             onChangeText={setSearchKeyword}
-            onSubmitEditing={handleSearch}
+            returnKeyType="search"
           />
           {searchKeyword.length > 0 && (
             <TouchableOpacity onPress={() => {
               setSearchKeyword('');
-              loadDebts();
             }}>
               <MaterialCommunityIcons name="close-circle" size={20} color={COLORS.gray400} />
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={handleSearch} style={styles.searchButton}>
-            <Text style={styles.searchButtonText}>Tìm</Text>
-          </TouchableOpacity>
+          {loading && searchKeyword.length > 0 && (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 8 }} />
+          )}
         </View>
 
         {/* Status Filter */}
@@ -341,18 +353,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: COLORS.gray800,
-  },
-  searchButton: {
-    marginLeft: 8,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  searchButtonText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '600',
   },
   filterRow: {
     flexDirection: 'row',

@@ -98,6 +98,22 @@ class PurchaseOrderService {
   }
 
   /**
+   * Update an existing purchase order
+   */
+  async updatePurchaseOrder(data: any): Promise<any> {
+    try {
+      console.log('Updating purchase order with data:', JSON.stringify(data, null, 2));
+      const response = await apiClient.post<any>('/api/v1/purchase-orders/update-order', data);
+      console.log('Purchase order updated successfully:', response);
+      return response;
+    } catch (error: any) {
+      console.error('Error updating purchase order:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+  }
+
+  /**
    * Approve purchase order
    */
   async approvePurchaseOrder(id: string): Promise<any> {
@@ -182,6 +198,58 @@ class PurchaseOrderService {
       return [];
     } catch (error) {
       console.error('Error fetching products:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search purchase orders
+   */
+  async searchPurchaseOrders(search: string, page: number = 0, size: number = 10): Promise<PurchaseOrderListItem[]> {
+    try {
+      // Map Vietnamese status terms to English for API search
+      const vietnameseToEnglish: Record<string, string> = {
+        'nháp': 'DRAFT',
+        'nhap': 'DRAFT', // without accent
+        'đã duyệt': 'APPROVED',
+        'da duyet': 'APPROVED', // without accent
+        'duyệt': 'APPROVED',
+        'duyet': 'APPROVED', // without accent
+        'đã hủy': 'CANCELLED',
+        'da huy': 'CANCELLED', // without accent
+        'hủy': 'CANCELLED',
+        'huy': 'CANCELLED', // without accent
+        'đã huỷ': 'CANCELLED', // alternative spelling
+        'huỷ': 'CANCELLED',
+      };
+
+      let searchTerm = search;
+      const lowerSearch = search.toLowerCase().trim();
+      
+      // Check if search term matches any Vietnamese status
+      if (vietnameseToEnglish[lowerSearch]) {
+        searchTerm = vietnameseToEnglish[lowerSearch];
+      }
+      
+      const response = await apiClient.get<any>(
+        `/api/v1/purchase-orders/search-orders?search=${encodeURIComponent(searchTerm)}&page=${page}&size=${size}&sort=createdAt,desc`
+      );
+      console.log('Search purchase orders response:', response);
+      
+      // Handle paginated response: { data: { content: [...] } }
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        return response.data.content;
+      }
+      
+      // Handle direct array in data: { data: [...] }
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      
+      console.warn('Unexpected search response format:', response);
+      return [];
+    } catch (error: any) {
+      console.error('Error searching purchase orders:', error);
       throw error;
     }
   }

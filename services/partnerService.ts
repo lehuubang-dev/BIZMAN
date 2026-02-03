@@ -8,9 +8,24 @@ class PartnerService {
   async getSuppliers(): Promise<Supplier[]> {
     try {
       const response = await apiClient.get<any>('/api/v1/partners/get-suppliers');
-      return response?.data || response || [];
+      // Handle both direct data and paginated data structures
+      return response?.data?.content || response?.data || response || [];
     } catch (error) {
       console.error('Error fetching suppliers:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search suppliers
+   */
+  async searchSuppliers(search: string): Promise<Supplier[]> {
+    try {
+      const response = await apiClient.get<any>(`/api/v1/partners/search-suppliers?search=${encodeURIComponent(search)}`);
+      // API returns paginated data in data.content
+      return response?.data?.content || response?.data || response || [];
+    } catch (error) {
+      console.error('Error searching suppliers:', error);
       throw error;
     }
   }

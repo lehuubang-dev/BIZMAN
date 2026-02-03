@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PurchaseOrderListItem } from '../../../types/purchaseOrder';
+import { purchaseOrderService } from '../../../services/purchaseOrderService';
+import ImportGoodUpdate from './ImportGoodUpdate';
 
 const COLORS = {
   primary: '#2196F3',
@@ -29,10 +31,13 @@ interface ImportGoodListProps {
   onView: (orderId: string) => void;
   onApprove: (orderId: string, orderNumber: string) => void;
   onCreate: () => void;
+  onUpdate?: (orderId: string) => void;
 }
 
-export default function ImportGoodList({ orders, onView, onApprove, onCreate }: ImportGoodListProps) {
+export default function ImportGoodList({ orders, onView, onApprove, onCreate, onUpdate }: ImportGoodListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const handleToggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
@@ -59,7 +64,6 @@ export default function ImportGoodList({ orders, onView, onApprove, onCreate }: 
     };
     return labels[status] || status;
   };
-
   const renderItem = ({ item }: { item: PurchaseOrderListItem }) => {
     const isExpanded = expandedId === item.id;
     const statusColor = getStatusColor(item.orderStatus);
@@ -108,19 +112,29 @@ export default function ImportGoodList({ orders, onView, onApprove, onCreate }: 
             </View>
           </View>
         </TouchableOpacity>
-
+        {/* Menu thao tác */}
         {isExpanded && (
           <View style={styles.actions}>
             {item.orderStatus === 'DRAFT' && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: COLORS.success + '10' }]}
-                onPress={() => onApprove(item.id, item.orderNumber)}
-              >
-                <MaterialCommunityIcons name="check-circle-outline" size={18} color={COLORS.success} />
-                <Text style={[styles.actionText, { color: COLORS.success }]}>Duyệt</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.success + '10' }]}
+                  onPress={() => onApprove(item.id, item.orderNumber)}
+                >
+                  <MaterialCommunityIcons name="check-circle-outline" size={18} color={COLORS.success} />
+                  <Text style={[styles.actionText, { color: COLORS.success }]}>Duyệt</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.primary + '10' }]}
+                  onPress={() => { setSelectedOrderId(item.id); setShowUpdateModal(true); }}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={18} color={COLORS.primary} />
+                  <Text style={[styles.actionText, { color: COLORS.primary }]}>Cập nhật</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+              </>
             )}
-            <View style={styles.actionDivider} />
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: COLORS.white }]}
               onPress={() => onView(item.id)}
@@ -156,6 +170,16 @@ export default function ImportGoodList({ orders, onView, onApprove, onCreate }: 
       <TouchableOpacity style={styles.fab} onPress={onCreate}>
         <MaterialCommunityIcons name="plus" size={28} color={COLORS.white} />
       </TouchableOpacity>
+      <ImportGoodUpdate
+        visible={showUpdateModal}
+        orderId={selectedOrderId}
+        onClose={() => { setShowUpdateModal(false); setSelectedOrderId(null); }}
+        onUpdated={() => {
+          // Optionally, you can refresh the list by calling a prop or emitting event
+          // If parent provided onUpdate callback, call it so parent can refresh
+          if (onUpdate) onUpdate(selectedOrderId || '');
+        }}
+      />
     </View>
   );
 }

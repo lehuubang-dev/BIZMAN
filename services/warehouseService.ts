@@ -34,6 +34,51 @@ class WarehouseService {
   }
 
   /**
+   * Search warehouses
+   */
+  async searchWarehouses(search: string, page = 0, size = 10): Promise<Warehouse[]> {
+    try {
+      const url = `/api/v1/warehouses/search-warehouses?search=${encodeURIComponent(search)}&page=${page}&size=${size}`;
+      console.log('Searching warehouses with URL:', url);
+      
+      const response = await apiClient.get<any>(url);
+      console.log('Warehouse Search API Response:', response);
+      
+      // Handle paginated response: { data: { content: [...] } }
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        console.log(`Found ${response.data.content.length} warehouses`);
+        return response.data.content;
+      }
+      
+      // Handle direct array in data: { data: [...] }
+      if (response?.data && Array.isArray(response.data)) {
+        console.log(`Found ${response.data.length} warehouses (direct array)`);
+        return response.data;
+      }
+      
+      // Handle direct array response: [...]
+      if (Array.isArray(response)) {
+        console.log(`Found ${response.length} warehouses (direct response)`);
+        return response;
+      }
+      
+      console.warn('Unexpected warehouse search response format:', response);
+      return [];
+    } catch (error: any) {
+      console.error('Error searching warehouses:', error);
+      // Return more specific error messages
+      if (error?.response?.status === 404) {
+        throw new Error('Không tìm thấy API tìm kiếm kho hàng');
+      } else if (error?.response?.status >= 500) {
+        throw new Error('Lỗi server, vui lòng thử lại sau');
+      } else if (error?.message) {
+        throw new Error(`Lỗi tìm kiếm: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Get products in warehouse
    */
   async getWarehouseProducts(warehouseId: string): Promise<WarehouseProduct[]> {

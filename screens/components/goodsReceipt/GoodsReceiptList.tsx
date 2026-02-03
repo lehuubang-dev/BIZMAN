@@ -54,6 +54,7 @@ export default function GoodsReceiptList({
       DRAFT: COLORS.gray600,
       RECEIVED: COLORS.success,
       PARTIAL: COLORS.warning,
+      PARTIAL_COMPLETED: COLORS.purple,
       CANCELLED: COLORS.error,
     };
     return colors[status] || COLORS.gray600;
@@ -64,6 +65,7 @@ export default function GoodsReceiptList({
       DRAFT: 'Nháp',
       RECEIVED: 'Đã nhập kho',
       PARTIAL: 'Nhập một phần',
+      PARTIAL_COMPLETED: 'Hoàn thành một phần',
       CANCELLED: 'Đã hủy',
     };
     return labels[status] || status;
@@ -134,7 +136,7 @@ export default function GoodsReceiptList({
 
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>Tổng tiền:</Text>
-              <Text style={styles.priceValue}>{formatCurrency(item.subTotal)} đ</Text>
+              <Text style={styles.priceValue}>{formatCurrency(item.subTotal)}</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -252,6 +254,7 @@ const styles = StyleSheet.create({
   receiptDate: {
     fontSize: 12,
     color: COLORS.gray600,
+    width: '40%',
   },
   infoRow: {
     flexDirection: 'row',
@@ -314,6 +317,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: COLORS.gray600,
+    width: '60%',
+    textAlign: 'center',
   },
   fab: {
     position: 'absolute',

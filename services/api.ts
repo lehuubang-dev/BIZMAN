@@ -1,9 +1,13 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiError } from '../types';
 import { API_BASE_URL as ENV_API_BASE_URL } from '@env';
 
 // API Base URL from environment variable
 export const API_BASE_URL = ENV_API_BASE_URL;
+
+// AsyncStorage key for token
+const TOKEN_STORAGE_KEY = '@bizman_access_token';
 
 // API Configuration
 const DEFAULT_HEADERS = {
@@ -93,12 +97,30 @@ export class ApiClient {
     }
   }
 
-  setToken(token: string | null) {
+  async setToken(token: string | null) {
     this.token = token;
+    if (token) {
+      await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
   }
 
   getToken(): string | null {
     return this.token;
+  }
+
+  async loadToken(): Promise<string | null> {
+    try {
+      const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+      if (token) {
+        this.token = token;
+      }
+      return token;
+    } catch (error) {
+      console.error('Error loading token from AsyncStorage:', error);
+      return null;
+    }
   }
 
   async get<T>(endpoint: string, config?: AxiosRequestConfig): Promise<T> {

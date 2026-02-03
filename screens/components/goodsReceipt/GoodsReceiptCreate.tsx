@@ -64,12 +64,15 @@ export default function GoodsReceiptCreate({
   const [loading, setLoading] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [loadingPO, setLoadingPO] = useState(false);
   
   // Options for dropdowns
   const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [productOptions, setProductOptions] = useState<any[]>([]);
+  const [purchaseOrderDetail, setPurchaseOrderDetail] = useState<any>(null);
+  const [allProducts, setAllProducts] = useState<any[]>([]);
   
   // Form fields
   const [purchaseOrderId, setPurchaseOrderId] = useState('');
@@ -116,11 +119,54 @@ export default function GoodsReceiptCreate({
       setPurchaseOrders(purchaseOrdersData);
       setWarehouses(warehousesData);
       setSuppliers(suppliersData);
+      setAllProducts(productsData);
       setProductOptions(productsData);
     } catch (error) {
       Alert.alert('Lỗi', 'Không thể tải dữ liệu');
     } finally {
       setLoadingOptions(false);
+    }
+  };
+
+  const loadPurchaseOrderDetail = async (poId: string) => {
+    if (!poId) {
+      setPurchaseOrderDetail(null);
+      setProductOptions(allProducts);
+      return;
+    }
+    
+    setLoadingPO(true);
+    try {
+      const data = await purchaseOrderService.getPurchaseOrderById(poId);
+      console.log('Purchase Order Detail:', data);
+      
+      if (data) {
+        setPurchaseOrderDetail(data);
+        
+        // Auto-fill supplier (không thể thay đổi)
+        if (data.supplier?.id) {
+          setSupplierId(data.supplier.id);
+        }
+        
+        // Auto-fill warehouse (có thể thay đổi)
+        if (data.warehouse?.id) {
+          setWarehouseId(data.warehouse.id);
+        }
+        
+        // Filter products theo purchase order
+        if (data.products && data.products.length > 0) {
+          setProductOptions(data.products);
+        } else {
+          setProductOptions(allProducts);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error loading purchase order detail:', error);
+      Alert.alert('Lỗi', 'Không thể tải thông tin đơn hàng');
+      setPurchaseOrderDetail(null);
+      setProductOptions(allProducts);
+    } finally {
+      setLoadingPO(false);
     }
   };
 
@@ -187,11 +233,15 @@ export default function GoodsReceiptCreate({
   const handleProductSelect = (productId: string) => {
     const selectedProduct = productOptions.find(p => p.id === productId);
     if (selectedProduct) {
+      // Nếu có purchase order detail, lấy thông tin từ đó
+      const poProduct = purchaseOrderDetail?.products?.find((p: any) => p.id === productId);
+      
       setCurrentProduct({
         ...currentProduct,
         productId: productId,
         name: selectedProduct.name,
-        unitPrice: selectedProduct.costPrice || 0,
+        quantity: poProduct?.quantity || 1,
+        unitPrice: poProduct?.unitPrice || selectedProduct.costPrice || 0,
       });
     }
   };
@@ -199,10 +249,6 @@ export default function GoodsReceiptCreate({
   const handleAddProduct = () => {
     if (!currentProduct.productId) {
       Alert.alert('Thông báo', 'Vui lòng chọn sản phẩm');
-      return;
-    }
-    if (!currentProduct.location) {
-      Alert.alert('Thông báo', 'Vui lòng nhập vị trí');
       return;
     }
 
@@ -378,8 +424,12 @@ export default function GoodsReceiptCreate({
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={purchaseOrderId}
-                  onValueChange={setPurchaseOrderId}
+                  onValueChange={(value) => {
+                    setPurchaseOrderId(value);
+                    loadPurchaseOrderDetail(value);
+                  }}
                   style={styles.picker}
+                  enabled={!loadingPO}
                 >
                   <Picker.Item label="-- Chọn đơn hàng --" value="" />
                   {purchaseOrders.map((po) => (
@@ -391,6 +441,9 @@ export default function GoodsReceiptCreate({
                   ))}
                 </Picker>
               </View>
+              {loadingPO && (
+                <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 8 }} />
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -411,11 +464,12 @@ export default function GoodsReceiptCreate({
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Nhà cung cấp <Text style={styles.required}>*</Text></Text>
-              <View style={styles.pickerContainer}>
+              <View style={[styles.pickerContainer, purchaseOrderId && styles.pickerDisabled]}>
                 <Picker
                   selectedValue={supplierId}
                   onValueChange={setSupplierId}
                   style={styles.picker}
+                  enabled={!purchaseOrderId}
                 >
                   <Picker.Item label="-- Chọn nhà cung cấp --" value="" />
                   {suppliers.map((s) => (
@@ -423,6 +477,9 @@ export default function GoodsReceiptCreate({
                   ))}
                 </Picker>
               </View>
+              {purchaseOrderId && (
+                <Text style={styles.helperText}>Nhà cung cấp được lấy từ đơn hàng</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -453,7 +510,7 @@ export default function GoodsReceiptCreate({
           </View>
 
           {/* Status Section */}
-          <View style={styles.section}>
+          {/* <View style={styles.section}>
             <Text style={styles.sectionTitle}>Trạng thái</Text>
             
             <View style={styles.radioGroup}>
@@ -462,7 +519,7 @@ export default function GoodsReceiptCreate({
               {renderStatusRadio('Nhập một phần', 'PARTIAL', status, setStatus)}
               {renderStatusRadio('Đã hủy', 'CANCELLED', status, setStatus)}
             </View>
-          </View>
+          </View> */}
 
           {/* Products Section */}
           <View style={styles.section}>
@@ -488,7 +545,7 @@ export default function GoodsReceiptCreate({
                 <View style={styles.productDetails}>
                   <Text style={styles.productDetail}>SL: {product.quantity}</Text>
                   <Text style={styles.productDetail}>Vị trí: {product.location}</Text>
-                  <Text style={styles.productDetail}>Tầng: {product.stack}</Text>
+                  <Text style={styles.productDetail}>Số lô: {product.stack}</Text>
                 </View>
                 <View style={styles.productDetails}>
                   <Text style={styles.productDetail}>Đơn giá: {formatCurrency(product.unitPrice)} đ</Text>
@@ -593,23 +650,23 @@ export default function GoodsReceiptCreate({
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Vị trí <Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.label}>Vị trí:</Text>
                       <TextInput
                         style={styles.input}
                         value={currentProduct.location}
                         onChangeText={(text) => setCurrentProduct({ ...currentProduct, location: text })}
-                        placeholder="Vị trí (ví dụ: A-12-05)"
+                        placeholder="ví dụ: A-12-05"
                         placeholderTextColor={COLORS.gray400}
                       />
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Tầng <Text style={styles.required}>*</Text></Text>
+                      <Text style={styles.label}>Số lô <Text style={styles.required}>*</Text></Text>
                       <TextInput
                         style={styles.input}
                         value={currentProduct.stack.toString()}
                         onChangeText={(text) => setCurrentProduct({ ...currentProduct, stack: parseInt(text) || 1 })}
-                        placeholder="Tầng"
+                        placeholder="Số lô"
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
                       />
@@ -983,5 +1040,15 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  pickerDisabled: {
+    backgroundColor: COLORS.gray100,
+    opacity: 0.7,
+  },
+  helperText: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });

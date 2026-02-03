@@ -24,7 +24,7 @@ class AuthService {
     // Save token if present - API may return accessToken at root or in data
     const accessToken = (response as any)?.accessToken ?? (response as any)?.data?.accessToken;
     if (accessToken) {
-      apiClient.setToken(accessToken);
+      await apiClient.setToken(accessToken);
     }
 
     return response;
@@ -45,9 +45,9 @@ class AuthService {
     
     // Save token if present - handle both old and new response format
     if ((response as any).data?.accessToken) {
-      apiClient.setToken((response as any).data.accessToken);
+      await apiClient.setToken((response as any).data.accessToken);
     } else if ((response as any).token) {
-      apiClient.setToken((response as any).token);
+      await apiClient.setToken((response as any).token);
     }
     
     return response;
@@ -77,8 +77,8 @@ class AuthService {
   /**
    * Logout user
    */
-  logout() {
-    apiClient.setToken(null);
+  async logout() {
+    await apiClient.setToken(null);
   }
 
   /**
@@ -89,10 +89,17 @@ class AuthService {
   }
 
   /**
+   * Load token from storage
+   */
+  async loadToken(): Promise<string | null> {
+    return await apiClient.loadToken();
+  }
+
+  /**
    * Set token manually
    */
-  setToken(token: string) {
-    apiClient.setToken(token);
+  async setToken(token: string) {
+    await apiClient.setToken(token);
   }
 }
 

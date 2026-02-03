@@ -13,6 +13,7 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { purchaseOrderService } from "../../../services/purchaseOrderService";
+import { contractService } from "../../../services/contractService";
 import {
   CreatePurchaseOrderData,
   PaymentStatus,
@@ -48,6 +49,8 @@ interface ProductItem {
   expiredDate?: string;
   discountPercent: number;
   taxPercent: number;
+  discountAmount?: number;
+  taxAmount?: number;
   totalPrice: number;
   finalPrice: number;
   purchaseValue: number;
@@ -61,12 +64,15 @@ export default function ImportGoodCreate({
 }: ImportGoodCreateProps) {
   const [loading, setLoading] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [loadingContract, setLoadingContract] = useState(false);
 
   // Options for dropdowns
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
   const [productOptions, setProductOptions] = useState<any[]>([]);
+  const [contractDetail, setContractDetail] = useState<any>(null);
+  const [allProducts, setAllProducts] = useState<any[]>([]);
 
   // Form fields
   const [supplier, setSupplier] = useState("");
@@ -115,11 +121,51 @@ export default function ImportGoodCreate({
       setSuppliers(suppliersData);
       setWarehouses(warehousesData);
       setContracts(contractsData);
+      setAllProducts(productsData);
       setProductOptions(productsData);
     } catch (error) {
       Alert.alert("Lỗi", "Không thể tải dữ liệu");
     } finally {
       setLoadingOptions(false);
+    }
+  };
+
+  const loadContractDetail = async (contractId: string) => {
+    if (!contractId) {
+      setContractDetail(null);
+      setProductOptions(allProducts);
+      return;
+    }
+    
+    setLoadingContract(true);
+    try {
+      const data = await contractService.getContractById(contractId);
+      console.log('Contract Detail:', data);
+      
+      if (data) {
+        setContractDetail(data);
+        
+        // Auto-fill supplier (không thể thay đổi)
+        if (data.supplier?.id) {
+          setSupplier(data.supplier.id);
+        }
+        
+        // Filter products theo contract items
+        if (data.items && data.items.length > 0) {
+          // Lấy danh sách product từ contract items
+          const contractProducts = data.items.map((item: any) => item.product);
+          setProductOptions(contractProducts);
+        } else {
+          setProductOptions(allProducts);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error loading contract detail:', error);
+      Alert.alert('Lỗi', 'Không thể tải thông tin hợp đồng');
+      setContractDetail(null);
+      setProductOptions(allProducts);
+    } finally {
+      setLoadingContract(false);
     }
   };
 
@@ -139,9 +185,18 @@ export default function ImportGoodCreate({
 
   const calculateProductPrices = (product: ProductItem): ProductItem => {
     const totalPrice = product.quantity * product.unitPrice;
-    const discountAmount = totalPrice * product.discountPercent;
+    
+    // Nếu có discountAmount/taxAmount từ contract, dùng số tiền trực tiếp
+    const discountAmount = product.discountAmount !== undefined 
+      ? product.discountAmount 
+      : totalPrice * product.discountPercent;
+    
     const priceAfterDiscount = totalPrice - discountAmount;
-    const taxAmount = priceAfterDiscount * product.taxPercent;
+    
+    const taxAmount = product.taxAmount !== undefined
+      ? product.taxAmount
+      : priceAfterDiscount * product.taxPercent;
+    
     const finalPrice = priceAfterDiscount + taxAmount;
 
     return {
@@ -149,6 +204,8 @@ export default function ImportGoodCreate({
       totalPrice,
       finalPrice,
       purchaseValue: finalPrice,
+      discountAmount,
+      taxAmount,
     };
   };
 
@@ -168,12 +225,32 @@ export default function ImportGoodCreate({
   const handleProductSelect = (productId: string) => {
     const selectedProduct = productOptions.find((p) => p.id === productId);
     if (selectedProduct) {
-      setCurrentProduct({
-        ...currentProduct,
-        id: productId,
-        name: selectedProduct.name,
-        unitPrice: selectedProduct.costPrice || 0,
-      });
+      // Nếu có contract detail, lấy thông tin từ đó
+      const contractItem = contractDetail?.items?.find((item: any) => item.product.id === productId);
+      
+      if (contractItem) {
+        // Lấy thông tin từ contract: quantity, unitPrice, tax (số tiền), discount (số tiền)
+        setCurrentProduct({
+          ...currentProduct,
+          id: productId,
+          name: selectedProduct.name,
+          quantity: contractItem.quantity,
+          unitPrice: contractItem.unitPrice,
+          discountAmount: contractItem.discount || 0,
+          taxAmount: contractItem.tax || 0,
+          discountPercent: 0,
+          taxPercent: 0,
+        });
+      } else {
+        setCurrentProduct({
+          ...currentProduct,
+          id: productId,
+          name: selectedProduct.name,
+          unitPrice: selectedProduct.costPrice || 0,
+          discountAmount: undefined,
+          taxAmount: undefined,
+        });
+      }
     }
   };
 
@@ -181,6 +258,26 @@ export default function ImportGoodCreate({
     if (!currentProduct.id) {
       Alert.alert("Thông báo", "Vui lòng chọn sản phẩm");
       return;
+    }
+
+    // Validation số lượng
+    if (currentProduct.quantity <= 0) {
+      Alert.alert("Thông báo", "Số lượng phải lớn hơn 0");
+      return;
+    }
+
+    // Nếu có contract, kiểm tra số lượng không vượt quá
+    if (contractDetail) {
+      const contractItem = contractDetail.items?.find(
+        (item: any) => item.product.id === currentProduct.id
+      );
+      if (contractItem && currentProduct.quantity > contractItem.quantity) {
+        Alert.alert(
+          "Thông báo",
+          `Số lượng không được vượt quá ${contractItem.quantity} (theo hợp đồng)`
+        );
+        return;
+      }
     }
 
     const calculatedProduct = calculateProductPrices(currentProduct);
@@ -378,14 +475,45 @@ export default function ImportGoodCreate({
             </View>
 
             <View style={styles.inputGroup}>
+              <Text style={styles.label}>Hợp đồng</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={contract}
+                  onValueChange={(value) => {
+                    setContract(value);
+                    loadContractDetail(value);
+                  }}
+                  style={styles.picker}
+                  enabled={!loadingContract}
+                >
+                  <Picker.Item
+                    label="-- Chọn hợp đồng --"
+                    value=""
+                  />
+                  {contracts.map((c) => (
+                    <Picker.Item
+                      key={c.id}
+                      label={c.contractNumber + " - " + c.title}
+                      value={c.id}
+                    />
+                  ))}
+                </Picker>
+              </View>
+              {loadingContract && (
+                <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 8 }} />
+              )}
+            </View>
+
+            <View style={styles.inputGroup}>
               <Text style={styles.label}>
                 Nhà cung cấp <Text style={styles.required}>*</Text>
               </Text>
-              <View style={styles.pickerContainer}>
+              <View style={[styles.pickerContainer, contract && styles.pickerDisabled]}>
                 <Picker
                   selectedValue={supplier}
                   onValueChange={setSupplier}
                   style={styles.picker}
+                  enabled={!contract}
                 >
                   <Picker.Item label="-- Chọn nhà cung cấp --" value="" />
                   {suppliers.map((s) => (
@@ -393,6 +521,9 @@ export default function ImportGoodCreate({
                   ))}
                 </Picker>
               </View>
+              {contract && (
+                <Text style={styles.helperText}>Nhà cung cấp được lấy từ hợp đồng</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -413,28 +544,7 @@ export default function ImportGoodCreate({
               </View>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Hợp đồng</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={contract}
-                  onValueChange={setContract}
-                  style={styles.picker}
-                >
-                  <Picker.Item
-                    label="-- Chọn hợp đồng (không bắt buộc) --"
-                    value=""
-                  />
-                  {contracts.map((c) => (
-                    <Picker.Item
-                      key={c.id}
-                      label={c.contractNumber + " - " + c.title}
-                      value={c.id}
-                    />
-                  ))}
-                </Picker>
-              </View>
-            </View>
+            
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Mô tả</Text>
@@ -464,7 +574,7 @@ export default function ImportGoodCreate({
           </View>
 
           {/* Status Section */}
-          <View style={styles.section}>
+          {/* <View style={styles.section}>
             <Text style={styles.sectionTitle}>Trạng thái</Text>
 
             <View style={styles.inputGroup}>
@@ -520,7 +630,7 @@ export default function ImportGoodCreate({
                 )}
               </View>
             </View>
-          </View>
+          </View> */}
 
           {/* Products Section */}
           <View style={styles.section}>
@@ -558,13 +668,19 @@ export default function ImportGoodCreate({
                     SL: {product.quantity}
                   </Text>
                   <Text style={styles.productDetail}>
-                    Đơn giá: {formatCurrency(product.unitPrice)}
+                    Đơn giá: {formatCurrency(product.unitPrice)}đ
                   </Text>
                   <Text style={styles.productDetail}>
-                    Giảm: {product.discountPercent * 100}%
+                    Giảm: {product.discountAmount !== undefined 
+                      ? formatCurrency(product.discountAmount) + 'đ'
+                      : (product.discountPercent * 100) + '%'
+                    }
                   </Text>
                   <Text style={styles.productDetail}>
-                    Thuế: {product.taxPercent * 100}%
+                    Thuế: {product.taxAmount !== undefined
+                      ? formatCurrency(product.taxAmount) + 'đ'
+                      : (product.taxPercent * 100) + '%'
+                    }
                   </Text>
                 </View>
                 <View style={styles.productFooter}>
@@ -688,6 +804,16 @@ export default function ImportGoodCreate({
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
                       />
+                      {contractDetail && currentProduct.id && (() => {
+                        const contractItem = contractDetail.items?.find(
+                          (item: any) => item.product.id === currentProduct.id
+                        );
+                        return contractItem ? (
+                          <Text style={styles.helperText}>
+                            Số lượng tối đa: {contractItem.quantity} (theo hợp đồng)
+                          </Text>
+                        ) : null;
+                      })()}
                     </View>
 
                     <View style={styles.inputGroup}>
@@ -757,39 +883,51 @@ export default function ImportGoodCreate({
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Giảm giá (%)</Text>
+                      <Text style={styles.label}>Giảm giá {currentProduct.discountAmount !== undefined ? '(đ)' : '(%)'}</Text>
                       <TextInput
-                        style={styles.input}
-                        value={(
-                          currentProduct.discountPercent * 100
-                        ).toString()}
+                        style={[styles.input, currentProduct.discountAmount !== undefined && styles.inputDisabled]}
+                        value={currentProduct.discountAmount !== undefined
+                          ? formatCurrency(currentProduct.discountAmount)
+                          : (currentProduct.discountPercent * 100).toString()
+                        }
                         onChangeText={(text) =>
                           setCurrentProduct({
                             ...currentProduct,
                             discountPercent: (parseFloat(text) || 0) / 100,
                           })
                         }
-                        placeholder="Phần trăm giảm giá"
+                        placeholder={currentProduct.discountAmount !== undefined ? "Giảm giá (từ hợp đồng)" : "Phần trăm giảm giá"}
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
+                        editable={currentProduct.discountAmount === undefined}
                       />
+                      {currentProduct.discountAmount !== undefined && (
+                        <Text style={styles.helperText}>Giảm giá được lấy từ hợp đồng</Text>
+                      )}
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Thuế (%)</Text>
+                      <Text style={styles.label}>Thuế {currentProduct.taxAmount !== undefined ? '(đ)' : '(%)'}</Text>
                       <TextInput
-                        style={styles.input}
-                        value={(currentProduct.taxPercent * 100).toString()}
+                        style={[styles.input, currentProduct.taxAmount !== undefined && styles.inputDisabled]}
+                        value={currentProduct.taxAmount !== undefined
+                          ? formatCurrency(currentProduct.taxAmount)
+                          : (currentProduct.taxPercent * 100).toString()
+                        }
                         onChangeText={(text) =>
                           setCurrentProduct({
                             ...currentProduct,
                             taxPercent: (parseFloat(text) || 0) / 100,
                           })
                         }
-                        placeholder="Phần trăm thuế"
+                        placeholder={currentProduct.taxAmount !== undefined ? "Thuế (từ hợp đồng)" : "Phần trăm thuế"}
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
+                        editable={currentProduct.taxAmount === undefined}
                       />
+                      {currentProduct.taxAmount !== undefined && (
+                        <Text style={styles.helperText}>Thuế được lấy từ hợp đồng</Text>
+                      )}
                     </View>
 
                     <View style={styles.inputGroup}>
@@ -1297,5 +1435,19 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+  pickerDisabled: {
+    backgroundColor: COLORS.gray100,
+    opacity: 0.7,
+  },
+  helperText: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  inputDisabled: {
+    backgroundColor: COLORS.gray100,
+    color: COLORS.gray600,
   },
 });

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
+  Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
@@ -15,12 +17,18 @@ import ExpenseDetail from './components/expense/ExpenseDetail';
 const COLORS = {
   primary: '#2196F3',
   white: '#FFFFFF',
+  gray50: '#F9FAFB',
   gray100: '#F3F4F6',
+  gray200: '#E5E7EB',
+  gray400: '#9CA3AF',
+  gray600: '#4B5563',
+  gray800: '#1F2937',
 };
 
 export default function CashFlowScreen() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -30,6 +38,19 @@ export default function CashFlowScreen() {
     loadExpenses();
   }, []);
 
+  // Auto search with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchKeyword.trim()) {
+        handleSearch();
+      } else {
+        loadExpenses();
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchKeyword]);
+
   const loadExpenses = async () => {
     setLoading(true);
     try {
@@ -37,6 +58,26 @@ export default function CashFlowScreen() {
       setExpenses(data);
     } catch (error: any) {
       Alert.alert('Lỗi', error?.message || 'Không thể tải danh sách giao dịch');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchKeyword.trim()) {
+      loadExpenses();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('Searching expenses with keyword:', searchKeyword);
+      const data = await expenseService.searchExpenses(searchKeyword);
+      console.log('Search results count:', data.length);
+      setExpenses(data);
+    } catch (error) {
+      console.error('Search error:', error);
+      Alert.alert('Lỗi', 'Không thể tìm kiếm giao dịch');
     } finally {
       setLoading(false);
     }
@@ -76,6 +117,28 @@ export default function CashFlowScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <MaterialCommunityIcons name="magnify" size={20} color={COLORS.gray400} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm theo mô tả, loại giao dịch..."
+            value={searchKeyword}
+            onChangeText={setSearchKeyword}
+            returnKeyType="search"
+          />
+          {searchKeyword.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchKeyword('')}>
+              <MaterialCommunityIcons name="close-circle" size={20} color={COLORS.gray400} />
+            </TouchableOpacity>
+          )}
+          {loading && searchKeyword.length > 0 && (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 8 }} />
+          )}
+        </View>
+      </View>
+
       <ExpenseList
         expenses={expenses}
         onUpdate={handleUpdate}
@@ -113,6 +176,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: COLORS.gray100,
+  },
+  searchContainer: {
+    backgroundColor: COLORS.white,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.gray50,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: COLORS.gray800,
   },
   fab: {
     position: 'absolute',

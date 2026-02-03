@@ -23,6 +23,7 @@ import ProfileScreen from "./components/account/ProfileScreen";
 import TransactionsScreen from "./components/account/TransactionsScreen";
 import NotificationsScreen from "./components/account/NotificationsScreen";
 import SettingsScreen from "./components/account/SettingsScreen";
+import { authService } from "../services";
 
 const { width } = Dimensions.get("window");
 
@@ -50,6 +51,10 @@ export default function AccountScreen() {
 
   const loadUserData = async () => {
     try {
+      // Load token first
+      await authService.loadToken();
+      
+      // Then load user info
       const storedUserData = await AsyncStorage.getItem("userInfo");
       if (storedUserData) {
         setUserData(JSON.parse(storedUserData));
@@ -84,6 +89,7 @@ export default function AccountScreen() {
         onPress: async () => {
           try {
             await AsyncStorage.removeItem("userInfo");
+            await authService.logout(); // Clear token from storage
             setUserData(null);
             setIsLoggedIn(false);
           } catch (error) {

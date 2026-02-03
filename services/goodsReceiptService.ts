@@ -98,11 +98,65 @@ class GoodsReceiptService {
   async changeGoodsReceiptStatus(id: string): Promise<any> {
     try {
       console.log('Changing goods receipt status for ID:', id);
-      const response = await apiClient.post<any>('/api/v1/goods-receipts/change-goods-receipt-status', { id });
+      const response = await apiClient.post<any>('/api/v1/goods-receipts/approve-goods-receipt', { id });
       console.log('Goods receipt status changed successfully:', response);
       return response;
     } catch (error) {
       console.error('Error changing goods receipt status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search goods receipts
+   */
+  async searchGoodsReceipts(search: string, page: number = 0, size: number = 10): Promise<GoodsReceiptListItem[]> {
+    try {
+      // Map Vietnamese status terms to English for API search
+      const vietnameseToEnglish: Record<string, string> = {
+        'nháp': 'DRAFT',
+        'nhap': 'DRAFT', // without accent
+        'đã nhập kho': 'RECEIVED',
+        'da nhap kho': 'RECEIVED', // without accent
+        'nhập kho': 'RECEIVED',
+        'nhap kho': 'RECEIVED', // without accent
+        'nhập một phần': 'PARTIAL',
+        'nhap mot phan': 'PARTIAL', // without accent
+        'hoàn thành một phần': 'PARTIAL_COMPLETED',
+        'hoan thanh mot phan': 'PARTIAL_COMPLETED', // without accent
+        'đã hủy': 'CANCELLED',
+        'da huy': 'CANCELLED', // without accent
+        'hủy': 'CANCELLED',
+        'huy': 'CANCELLED' // without accent
+      };
+
+      let searchTerm = search;
+      const lowerSearch = search.toLowerCase().trim();
+      
+      // Check if search term matches any Vietnamese status
+      if (vietnameseToEnglish[lowerSearch]) {
+        searchTerm = vietnameseToEnglish[lowerSearch];
+      }
+      
+      const response = await apiClient.get<any>(
+        `/api/v1/goods-receipts/search-goods-receipts?search=${encodeURIComponent(searchTerm)}&page=${page}&size=${size}&sort=receiptDate,desc`
+      );
+      console.log('Search goods receipts response:', response);
+      
+      // Handle paginated response: { data: { content: [...] } }
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        return response.data.content;
+      }
+      
+      // Handle direct array in data: { data: [...] }
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      
+      console.warn('Unexpected search response format:', response);
+      return [];
+    } catch (error: any) {
+      console.error('Error searching goods receipts:', error);
       throw error;
     }
   }

@@ -4,8 +4,8 @@
 
 export type ContractStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
 export type ContractType = 'PURCHASE' | 'SALE' | 'SERVICE';
-export type DebtRecognitionMode = 'IMMEDIATE' | 'BY_COMPLETION' | 'BY_PAYMENT';
-export type TermStatus = 'PENDING' | 'COMPLETED' | 'OVERDUE' | 'CANCELLED';
+export type DebtRecognitionMode = 'IMMEDIATE' | 'BY_COMPLETION' | 'BY_RECEIPT_PARTIAL';
+export type TermStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
 
 export interface ContractSupplier {
   id: string;

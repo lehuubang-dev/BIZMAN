@@ -33,6 +33,10 @@ interface WarehouseListProps {
 export default function WarehouseList({ warehouses, onUpdate, onView, onDelete }: WarehouseListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Debug: Log warehouses data
+  console.log('WarehouseList received warehouses:', warehouses?.length || 0, 'items');
+  console.log('Warehouses data:', warehouses);
+
   const handleToggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
   };

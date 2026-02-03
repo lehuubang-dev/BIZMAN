@@ -94,6 +94,34 @@ class ExpenseService {
       throw error;
     }
   }
+
+  /**
+   * Search expenses
+   */
+  async searchExpenses(search: string, page: number = 0, size: number = 10): Promise<Expense[]> {
+    try {
+      const response = await apiClient.get<any>(
+        `/api/v1/expenses/search-expenses?search=${encodeURIComponent(search)}&page=${page}&size=${size}&sort=createdAt,desc`
+      );
+      console.log('Search expenses response:', response);
+      
+      // Handle paginated response: { data: { content: [...] } }
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        return response.data.content;
+      }
+      
+      // Handle direct array in data: { data: [...] }
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      
+      console.warn('Unexpected search response format:', response);
+      return [];
+    } catch (error: any) {
+      console.error('Error searching expenses:', error);
+      throw error;
+    }
+  }
 }
 
 export const expenseService = new ExpenseService();

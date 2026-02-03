@@ -35,7 +35,7 @@ export default function ExpenseDetail({ visible, expense, onClose }: ExpenseDeta
   if (!expense) return null;
 
   const formatCurrency = (value: number) => {
-    return Math.round(value).toLocaleString('vi-VN') + ' đ';
+    return Math.round(value).toLocaleString('vi-VN');
   };
 
   const getTypeConfig = (type: string) => {

@@ -28,9 +28,13 @@ const COLORS = {
 interface ContractListProps {
   contracts: ContractListItem[];
   onView: (contractId: string) => void;
+  onUpdate?: (contractId: string) => void;
+  onDelete?: (contractId: string) => void;
+  onCancel?: (contractId: string) => void;
+  onActivate?: (contractId: string) => void;
 }
 
-export default function ContractList({ contracts, onView }: ContractListProps) {
+export default function ContractList({ contracts, onView, onUpdate, onDelete, onCancel, onActivate }: ContractListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handleToggleExpand = (id: string) => {
@@ -150,15 +154,57 @@ export default function ContractList({ contracts, onView }: ContractListProps) {
             </View>
           </View>
         </TouchableOpacity>
-
+            {/* menu thao tác */}
         {isExpanded && (
           <View style={styles.actions}>
+            {item.status === 'DRAFT' && (
+              <>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.primary + '10' }]}
+                  onPress={() => onUpdate && onUpdate(item.id)}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={18} color={COLORS.primary} />
+                  <Text style={[styles.actionText, { color: COLORS.primary }]}>Cập nhật</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.white }]}
+                  onPress={() => onDelete && onDelete(item.id)}
+                >
+                  <MaterialCommunityIcons name="delete-outline" size={18} color={COLORS.error} />
+                  <Text style={[styles.actionText, { color: COLORS.error }]}>Xóa</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.success + '10' }]}
+                  onPress={() => onActivate && onActivate(item.id)}
+                >
+                  <MaterialCommunityIcons name="check-circle-outline" size={18} color={COLORS.success} />
+                  <Text style={[styles.actionText, { color: COLORS.success }]}>Kích hoạt</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+              </>
+            )}
+
+            {item.status === 'ACTIVE' && (
+              <>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.white }]}
+                  onPress={() => onCancel && onCancel(item.id)}
+                >
+                  <MaterialCommunityIcons name="cancel" size={18} color={COLORS.warning} />
+                  <Text style={[styles.actionText, { color: COLORS.warning }]}>Hủy</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+              </>
+            )}
+
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: COLORS.white }]}
               onPress={() => onView(item.id)}
             >
               <MaterialCommunityIcons name="eye-outline" size={18} color={COLORS.gray600} />
-              <Text style={[styles.actionText, { color: COLORS.gray600 }]}>Xem chi tiết</Text>
+              <Text style={[styles.actionText, { color: COLORS.gray600 }]}>Chi tiết</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -298,6 +344,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 12,
+  },
+  actionDivider: {
+    width: 1,
+    backgroundColor: COLORS.gray200,
   },
   actionText: {
     fontSize: 13,
