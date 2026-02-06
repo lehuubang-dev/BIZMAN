@@ -127,6 +127,32 @@ class PurchaseOrderService {
   }
 
   /**
+   * Delete purchase order (only for DRAFT status)
+   */
+  async deletePurchaseOrder(id: string): Promise<any> {
+    try {
+      const response = await apiClient.post<any>('/api/v1/purchase-orders/delete-order', { id });
+      return response;
+    } catch (error) {
+      console.error('Error deleting purchase order:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel purchase order (only for APPROVED status)
+   */
+  async cancelPurchaseOrder(id: string): Promise<any> {
+    try {
+      const response = await apiClient.post<any>('/api/v1/purchase-orders/cancel-order', { id });
+      return response;
+    } catch (error) {
+      console.error('Error cancelling purchase order:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get all suppliers for dropdown
    */
   async getSuppliers(): Promise<any[]> {

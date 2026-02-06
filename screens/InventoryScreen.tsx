@@ -7,8 +7,7 @@ import {
   TextInput,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ProductTab, ProductVariantTab, FloatingButtons, Product, COLORS } from './components/Inventory';
-import ProductCreate from './components/Inventory/ProductCreate';
+import { ProductTab, ProductVariantTab, FloatingButtons, Product, COLORS, SupplierFilter, ProductCreate, ProductVariantCreate } from './components/Inventory';
 import { TagFilter } from './components/Inventory/TagFilter';
 
 type TabType = 'products' | 'variants';
@@ -18,10 +17,16 @@ const InventoryScreen = () => {
   const [selectedItems, setSelectedItems] = useState<Product[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
+  const [showCreateVariant, setShowCreateVariant] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showTagFilter, setShowTagFilter] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('products');
+  
+  // States riêng cho tab variants
+  const [variantSearchText, setVariantSearchText] = useState('');
+  const [showSupplierFilter, setShowSupplierFilter] = useState(false);
+  const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
 
   const handleConfirm = () => {
     console.log('Confirmed items:', selectedItems);
@@ -33,6 +38,16 @@ const InventoryScreen = () => {
 
   const handleCartPress = () => {
     console.log('Cart pressed');
+  };
+
+  const handleCreateProduct = () => {
+    console.log('Create product pressed');
+    setShowCreateProduct(true);
+  };
+
+  const handleCreateVariant = () => {
+    console.log('Create variant pressed');
+    setShowCreateVariant(true);
   };
 
   const renderTabButton = (tab: TabType, title: string, icon: string) => {
@@ -54,6 +69,22 @@ const InventoryScreen = () => {
     );
   };
 
+  const getCurrentSearchText = () => {
+    return activeTab === 'products' ? searchText : variantSearchText;
+  };
+
+  const setCurrentSearchText = (text: string) => {
+    if (activeTab === 'products') {
+      setSearchText(text);
+    } else {
+      setVariantSearchText(text);
+    }
+  };
+
+  const getCurrentPlaceholder = () => {
+    return activeTab === 'products' ? 'Tìm kiếm sản phẩm...' : 'Tìm kiếm biến thể...';
+  };
+
   return (
     <View style={styles.container}>
       {/* Search & Filter Bar */}
@@ -71,15 +102,15 @@ const InventoryScreen = () => {
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm kiếm thông tin ..."
+            placeholder={getCurrentPlaceholder()}
             placeholderTextColor={COLORS.gray400}
-            value={searchText}
-            onChangeText={setSearchText}
+            value={getCurrentSearchText()}
+            onChangeText={setCurrentSearchText}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
           />
-          {searchText ? (
-            <TouchableOpacity onPress={() => setSearchText('')}>
+          {getCurrentSearchText() ? (
+            <TouchableOpacity onPress={() => setCurrentSearchText('')}>
               <MaterialCommunityIcons
                 name="close-circle"
                 size={20}
@@ -89,7 +120,8 @@ const InventoryScreen = () => {
           ) : null}
         </View>
 
-        {activeTab === 'products' && (
+        {/* Filter button - different for each tab */}
+        {activeTab === 'products' ? (
           <TouchableOpacity 
             style={[styles.filterButton, selectedTags.length > 0 && styles.filterButtonActive]} 
             onPress={() => setShowTagFilter(true)}
@@ -105,11 +137,31 @@ const InventoryScreen = () => {
               </View>
             )}
           </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={[styles.filterButton, selectedSuppliers.length > 0 && styles.filterButtonActive]} 
+            onPress={() => setShowSupplierFilter(true)}
+          >
+            <MaterialCommunityIcons
+              name="account-group"
+              size={20}
+              color={COLORS.primary}
+            />
+            {selectedSuppliers.length > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{selectedSuppliers.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         )}
 
+        {/* Add button */}
         <TouchableOpacity style={styles.helpButton} onPress={() => {
-          console.log('Create Product button pressed');
-          setShowCreateProduct(true);
+          if (activeTab === 'products') {
+            handleCreateProduct();
+          } else {
+            handleCreateVariant();
+          }
         }}>
           <MaterialCommunityIcons
             name="plus-circle"
@@ -136,7 +188,8 @@ const InventoryScreen = () => {
         ) : (
           <ProductVariantTab
             refreshTrigger={refreshTrigger}
-            searchKeyword={searchText}
+            searchKeyword={variantSearchText}
+            selectedSuppliers={selectedSuppliers}
           />
         )}
       </View>
@@ -183,12 +236,39 @@ const InventoryScreen = () => {
         </>
       )}
 
+      {showCreateVariant && (
+        <>
+          {console.log('Rendering ProductVariantCreate modal', showCreateVariant)}
+          <ProductVariantCreate 
+            onClose={() => {
+              console.log('ProductVariantCreate onClose called');
+              setShowCreateVariant(false);
+            }} 
+            onSuccess={() => {
+              console.log('ProductVariantCreate onSuccess called');
+              setRefreshTrigger(prev => prev + 1);
+              setShowCreateVariant(false);
+            }} 
+          />
+        </>
+      )}
+
       <TagFilter
         visible={showTagFilter}
         onClose={() => setShowTagFilter(false)}
         selectedTags={selectedTags}
         onTagsChange={(tags) => {
           setSelectedTags(tags);
+          setRefreshTrigger(prev => prev + 1);
+        }}
+      />
+
+      <SupplierFilter
+        visible={showSupplierFilter}
+        onClose={() => setShowSupplierFilter(false)}
+        selectedSupplierIds={selectedSuppliers}
+        onSuppliersChange={(supplierIds) => {
+          setSelectedSuppliers(supplierIds);
           setRefreshTrigger(prev => prev + 1);
         }}
       />

@@ -32,9 +32,11 @@ interface ImportGoodListProps {
   onApprove: (orderId: string, orderNumber: string) => void;
   onCreate: () => void;
   onUpdate?: (orderId: string) => void;
+  onDelete?: (orderId: string) => void;
+  onCancel?: (orderId: string) => void;
 }
 
-export default function ImportGoodList({ orders, onView, onApprove, onCreate, onUpdate }: ImportGoodListProps) {
+export default function ImportGoodList({ orders, onView, onApprove, onCreate, onUpdate, onDelete, onCancel }: ImportGoodListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -45,6 +47,50 @@ export default function ImportGoodList({ orders, onView, onApprove, onCreate, on
 
   const formatCurrency = (value: number) => {
     return Math.round(value).toLocaleString('vi-VN');
+  };
+
+  const handleDeleteOrder = (orderId: string, orderNumber: string) => {
+    Alert.alert(
+      'Xác nhận xóa',
+      `Bạn có chắc chắn muốn xóa đơn nhập hàng "${orderNumber}"?\n\nHành động này không thể hoàn tác.`,
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: () => {
+            if (onDelete) {
+              onDelete(orderId);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCancelOrder = (orderId: string, orderNumber: string) => {
+    Alert.alert(
+      'Xác nhận hủy đơn hàng',
+      `Bạn có chắc chắn muốn hủy đơn nhập hàng "${orderNumber}"?\n\nĐơn hàng sẽ chuyển sang trạng thái đã hủy.`,
+      [
+        {
+          text: 'Không',
+          style: 'cancel',
+        },
+        {
+          text: 'Hủy đơn hàng',
+          style: 'destructive',
+          onPress: () => {
+            if (onCancel) {
+              onCancel(orderId);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getStatusColor = (status: string) => {
@@ -94,9 +140,18 @@ export default function ImportGoodList({ orders, onView, onApprove, onCreate, on
                   {getStatusLabel(item.orderStatus)}
                 </Text>
               </View>
-              <Text style={styles.orderDate}>
-                {new Date(item.orderDate).toLocaleDateString('vi-VN')}
-              </Text>
+              <View style={styles.dateContainer}>
+                <MaterialCommunityIcons name="calendar" size={12} color={COLORS.gray400} />
+                <Text style={styles.orderDate}>
+                  {new Date(item.orderDate).toLocaleDateString('vi-VN')}
+                </Text>
+              </View>
+              <View style={styles.timeContainer}>
+                <MaterialCommunityIcons name="clock-outline" size={12} color={COLORS.gray400} />
+                <Text style={styles.createdDate}>
+                  {new Date(item.createdAt).toLocaleDateString('vi-VN')}
+                </Text>
+              </View>
             </View>
 
             {item.supplier && (
@@ -106,8 +161,39 @@ export default function ImportGoodList({ orders, onView, onApprove, onCreate, on
               </View>
             )}
 
+            {item.warehouse && (
+              <View style={styles.warehouseRow}>
+                <MaterialCommunityIcons name="warehouse" size={14} color={COLORS.gray600} />
+                <Text style={styles.warehouseText} numberOfLines={1}>{item.warehouse.name}</Text>
+              </View>
+            )}
+
+            {(item as any).contract && (
+              <View style={styles.contractRow}>
+                <MaterialCommunityIcons name="file-document" size={14} color={COLORS.primary} />
+                <Text style={styles.contractText} numberOfLines={1}>HĐ: {(item as any).contract.contractNumber}</Text>
+              </View>
+            )}
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <MaterialCommunityIcons name="package-variant" size={12} color={COLORS.gray400} />
+                <Text style={styles.statText}>{(item as any).products?.length || 0} SP</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <MaterialCommunityIcons name="currency-usd" size={12} color={COLORS.gray400} />
+                <Text style={styles.statText}>{formatCurrency(item.subTotal)}</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <MaterialCommunityIcons name="percent" size={12} color={COLORS.gray400} />
+                <Text style={styles.statText}>{formatCurrency(item.taxAmount)}</Text>
+              </View>
+            </View>
+
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Tổng tiền:</Text>
+              <Text style={styles.priceLabel}>Tổng thanh toán:</Text>
               <Text style={styles.priceValue}>{formatCurrency(item.totalAmount)}</Text>
             </View>
           </View>
@@ -131,6 +217,26 @@ export default function ImportGoodList({ orders, onView, onApprove, onCreate, on
                 >
                   <MaterialCommunityIcons name="pencil-outline" size={18} color={COLORS.primary} />
                   <Text style={[styles.actionText, { color: COLORS.primary }]}>Cập nhật</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.error + '10' }]}
+                  onPress={() => handleDeleteOrder(item.id, item.orderNumber)}
+                >
+                  <MaterialCommunityIcons name="delete-outline" size={18} color={COLORS.error} />
+                  <Text style={[styles.actionText, { color: COLORS.error }]}>Xóa</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+              </>
+            )}
+            {item.orderStatus === 'APPROVED' && (
+              <>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.warning + '10' }]}
+                  onPress={() => handleCancelOrder(item.id, item.orderNumber)}
+                >
+                  <MaterialCommunityIcons name="cancel" size={18} color={COLORS.warning} />
+                  <Text style={[styles.actionText, { color: COLORS.warning }]}>Hủy đơn hàng</Text>
                 </TouchableOpacity>
                 <View style={styles.actionDivider} />
               </>
@@ -222,7 +328,8 @@ const styles = StyleSheet.create({
   headerDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -234,8 +341,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   orderDate: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.gray600,
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center', 
+    gap: 3,
+  },
+  createdDate: {
+    fontSize: 11,
+    color: COLORS.gray400,
   },
   supplierRow: {
     flexDirection: 'row',
@@ -246,6 +367,52 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: COLORS.gray600,
+  },
+  warehouseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  warehouseText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.gray600,
+  },
+  contractRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  contractText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.gray50,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  statItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    justifyContent: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: COLORS.gray200,
+  },
+  statText: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    fontWeight: '500',
   },
   priceRow: {
     flexDirection: 'row',
@@ -258,6 +425,7 @@ const styles = StyleSheet.create({
   priceLabel: {
     fontSize: 13,
     color: COLORS.gray600,
+    width: '60%',
   },
   priceValue: {
     fontSize: 16,

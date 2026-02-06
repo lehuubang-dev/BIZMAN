@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ProductDetail } from "../../../types/warehouse";
+import { WarehouseStockItem } from "../../../types/warehouse";
 import { warehouseService } from "../../../services/warehouseService";
 
 const { width } = Dimensions.get("window");
@@ -34,34 +34,34 @@ const COLORS = {
 
 interface GoodsDetailProps {
   visible: boolean;
-  productId: string | null;
+  batchId: string | null;
   warehouseId: string | null;
   onClose: () => void;
 }
 
 export default function GoodsDetail({
   visible,
-  productId,
+  batchId,
   warehouseId,
   onClose,
 }: GoodsDetailProps) {
-  const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [product, setProduct] = useState<WarehouseStockItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => {
-    if (visible && productId && warehouseId) {
+    if (visible && batchId && warehouseId) {
       loadProductDetail();
     }
-  }, [visible, productId, warehouseId]);
+  }, [visible, batchId, warehouseId]);
 
   const loadProductDetail = async () => {
-    if (!productId || !warehouseId) return;
+    if (!batchId || !warehouseId) return;
 
     setLoading(true);
     try {
       const data = await warehouseService.getProductWarehouseById(
-        productId,
+        batchId,
         warehouseId,
       );
       setProduct(data);
@@ -127,11 +127,11 @@ export default function GoodsDetail({
               showsVerticalScrollIndicator={false}
             >
               {/* Image Gallery */}
-              {product.images && product.images.length > 0 && (
+              {product.productBatch.productVariant.product.images && product.productBatch.productVariant.product.images.length > 0 && (
                 <View style={styles.imageSection}>
                   <Image
                     source={{
-                      uri: `http://192.168.5.109:8080${product.images[selectedImageIndex].imageUrl}`,
+                      uri: `http://192.168.1.2:8080${product.productBatch.productVariant.product.images[selectedImageIndex].imageUrl}`,
                     }}
                     style={styles.mainImage}
                     resizeMode="cover"
@@ -142,7 +142,7 @@ export default function GoodsDetail({
                     style={styles.thumbnailContainer}
                     contentContainerStyle={styles.thumbnailContent}
                   >
-                    {product.images.map((img, index) => (
+                    {product.productBatch.productVariant.product.images.map((img, index) => (
                       <TouchableOpacity
                         key={img.id}
                         onPress={() => setSelectedImageIndex(index)}
@@ -154,7 +154,7 @@ export default function GoodsDetail({
                       >
                         <Image
                           source={{
-                            uri: `http://192.168.5.109:8080${img.imageUrl}`,
+                            uri: `http://192.168.1.2:8080${img.imageUrl}`,
                           }}
                           style={styles.thumbnailImage}
                           resizeMode="cover"
@@ -167,20 +167,20 @@ export default function GoodsDetail({
 
               {/* Product Name & Type */}
               <View style={styles.titleCard}>
-                <Text style={styles.productName}>{product.name}</Text>
+                <Text style={styles.productName}>{product.productBatch.productVariant.name}</Text>
                 <View
                   style={[
                     styles.typeBadge,
-                    { backgroundColor: getTypeColor(product.type) + "15" },
+                    { backgroundColor: getTypeColor(product.productBatch.productVariant.product.type) + "15" },
                   ]}
                 >
                   <Text
                     style={[
                       styles.typeText,
-                      { color: getTypeColor(product.type) },
+                      { color: getTypeColor(product.productBatch.productVariant.product.type) },
                     ]}
                   >
-                    {getTypeLabel(product.type)}
+                    {getTypeLabel(product.productBatch.productVariant.product.type)}
                   </Text>
                 </View>
               </View>
@@ -199,7 +199,7 @@ export default function GoodsDetail({
                       <Text style={styles.priceTitle}>Giá vốn</Text>
                     </View>
                     <Text style={styles.priceAmount}>
-                      {formatCurrency(product.costPrice)}
+                      {formatCurrency(product.productBatch.costPrice)}
                     </Text>
                     <View style={styles.priceFooter}>
                       <MaterialCommunityIcons
@@ -219,54 +219,68 @@ export default function GoodsDetail({
                     />
                   </View>
 
-                  <View style={[styles.priceCard, styles.priceCardHighlight]}>
-                    <View style={styles.priceHeader}>
-                      <View
-                        style={[
-                          styles.priceDot,
-                          { backgroundColor: COLORS.error },
-                        ]}
-                      />
-                      <Text style={styles.priceTitle}>Giá bán</Text>
-                    </View>
-                    <Text
-                      style={[styles.priceAmount, styles.priceAmountHighlight]}
-                    >
-                      {formatCurrency(product.sellPrice)}
-                    </Text>
-                    <View style={styles.priceFooter}>
-                      <MaterialCommunityIcons
-                        name="trending-up"
-                        size={12}
-                        color={COLORS.success}
-                      />
-                      <Text
-                        style={[styles.priceNote, { color: COLORS.success }]}
-                      >
-                        +{formatCurrency(product.sellPrice - product.costPrice)}
-                      </Text>
-                    </View>
-                  </View>
+                  {(() => {
+                    const costPrice = product.productBatch.costPrice;
+                    const profitMargin = product.productBatch.productVariant.product.productCategory.profitMargin;
+                    const sellPrice = costPrice * (1 + profitMargin / 100);
+                    const profit = sellPrice - costPrice;
+                    const profitPercent = ((profit / costPrice) * 100).toFixed(1);
+
+                    return (
+                      <>
+                        <View style={[styles.priceCard, styles.priceCardHighlight]}>
+                          <View style={styles.priceHeader}>
+                            <View
+                              style={[
+                                styles.priceDot,
+                                { backgroundColor: COLORS.error },
+                              ]}
+                            />
+                            <Text style={styles.priceTitle}>Giá bán</Text>
+                          </View>
+                          <Text
+                            style={[styles.priceAmount, styles.priceAmountHighlight]}
+                          >
+                            {formatCurrency(sellPrice)}
+                          </Text>
+                          <View style={styles.priceFooter}>
+                            <MaterialCommunityIcons
+                              name="trending-up"
+                              size={12}
+                              color={COLORS.success}
+                            />
+                            <Text
+                              style={[styles.priceNote, { color: COLORS.success }]}
+                            >
+                              +{formatCurrency(profit)}
+                            </Text>
+                          </View>
+                        </View>
+                      </>
+                    );
+                  })()}
                 </View>
 
-                <View style={styles.profitBanner}>
-                  <View style={styles.profitContent}>
-                    <MaterialCommunityIcons
-                      name="chart-line"
-                      size={16}
-                      color={COLORS.success}
-                    />
-                    <Text style={styles.profitLabel}>Tỷ suất lợi nhuận</Text>
-                  </View>
-                  <Text style={styles.profitValue}>
-                    {(
-                      ((product.sellPrice - product.costPrice) /
-                        product.costPrice) *
-                      100
-                    ).toFixed(1)}
-                    %
-                  </Text>
-                </View>
+                {(() => {
+                  const costPrice = product.productBatch.costPrice;
+                  const profitMargin = product.productBatch.productVariant.product.productCategory.profitMargin;
+                  
+                  return (
+                    <View style={styles.profitBanner}>
+                      <View style={styles.profitContent}>
+                        <MaterialCommunityIcons
+                          name="chart-line"
+                          size={16}
+                          color={COLORS.success}
+                        />
+                        <Text style={styles.profitLabel}>Tỷ suất lợi nhuận</Text>
+                      </View>
+                      <Text style={styles.profitValue}>
+                        {profitMargin}%
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
 
               {/* Stock Info */}
@@ -289,22 +303,33 @@ export default function GoodsDetail({
                       />
                       <Text style={styles.infoGridLabel}>Số lượng</Text>
                       <Text style={styles.infoGridValue}>
-                        {product.quantity} {product.unit}
+                        {product.warehouseStock.quantityOnHand} {product.productBatch.productVariant.unit}
                       </Text>
                     </View>
                     <View style={styles.infoGridItem}>
                       <MaterialCommunityIcons
-                        name="alert-circle-outline"
+                        name="check-circle"
                         size={16}
-                        color={COLORS.warning}
+                        color={COLORS.success}
                       />
-                      <Text style={styles.infoGridLabel}>Tồn tối thiểu</Text>
+                      <Text style={styles.infoGridLabel}>Khả dụng</Text>
                       <Text style={styles.infoGridValue}>
-                        {product.minStock} {product.unit}
+                        {product.warehouseStock.quantityAvailable} {product.productBatch.productVariant.unit}
                       </Text>
                     </View>
                   </View>
                   <View style={styles.infoGrid}>
+                    <View style={styles.infoGridItem}>
+                      <MaterialCommunityIcons
+                        name="clock-outline"
+                        size={16}
+                        color={COLORS.warning}
+                      />
+                      <Text style={styles.infoGridLabel}>Đặt trước</Text>
+                      <Text style={styles.infoGridValue}>
+                        {product.warehouseStock.quantityReserved} {product.productBatch.productVariant.unit}
+                      </Text>
+                    </View>
                     <View style={styles.infoGridItem}>
                       <MaterialCommunityIcons
                         name="map-marker"
@@ -313,18 +338,18 @@ export default function GoodsDetail({
                       />
                       <Text style={styles.infoGridLabel}>Vị trí</Text>
                       <Text style={styles.infoGridValue}>
-                        {product.location}
+                        {product.warehouseStock.location}
                       </Text>
                     </View>
-                    <View style={styles.infoGridItem}>
+                    {/* <View style={styles.infoGridItem}>
                       <MaterialCommunityIcons
                         name="layers"
                         size={16}
                         color={COLORS.indigo}
                       />
-                      <Text style={styles.infoGridLabel}>Số stack</Text>
-                      <Text style={styles.infoGridValue}>{product.stack}</Text>
-                    </View>
+                      <Text style={styles.infoGridLabel}>Batch Code</Text>
+                      <Text style={styles.infoGridValue}>{product.productBatch.batchCode}</Text>
+                    </View> */}
                   </View>
                 </View>
               </View>
@@ -342,38 +367,83 @@ export default function GoodsDetail({
                 <View style={styles.cardContent}>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>SKU</Text>
-                    <Text style={styles.detailValue}>{product.sku}</Text>
+                    <Text style={styles.detailValue}>{product.productBatch.productVariant.sku}</Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Model</Text>
-                    <Text style={styles.detailValue}>{product.model}</Text>
+                    <Text style={styles.detailValue}>{product.productBatch.productVariant.model}</Text>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Part Number</Text>
-                    <Text style={styles.detailValue}>{product.partNumber}</Text>
+                    <Text style={styles.detailValue}>{product.productBatch.productVariant.partNumber}</Text>
                   </View>
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Serial Number</Text>
-                    <Text style={styles.detailValue}>
-                      {product.serialNumber}
-                    </Text>
+                    <Text style={styles.detailLabel}>Thuộc tính</Text>
+                    <View style={styles.attributesContainer}>
+                      {Object.entries(product.productBatch.productVariant.attributes || {}).map(([key, value]) => (
+                        <Text key={key} style={styles.attributeItem}>
+                          {key}: {value}
+                        </Text>
+                      ))}
+                      {Object.keys(product.productBatch.productVariant.attributes || {}).length === 0 && (
+                        <Text style={styles.attributeItem}>Không có</Text>
+                      )}
+                    </View>
                   </View>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Đơn vị</Text>
-                    <Text style={styles.detailValue}>{product.unit}</Text>
+                    <Text style={styles.detailValue}>{product.productBatch.productVariant.unit}</Text>
                   </View>
-                  {product.expiredDate && (
+                  {product.productBatch.expiryDate && (
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Hạn sử dụng</Text>
                       <Text
                         style={[styles.detailValue, { color: COLORS.warning }]}
                       >
-                        {new Date(product.expiredDate).toLocaleDateString(
+                        {new Date(product.productBatch.expiryDate).toLocaleDateString(
                           "vi-VN",
                         )}
                       </Text>
                     </View>
                   )}
+                </View>
+              </View>
+
+              {/* Batch Information */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <MaterialCommunityIcons
+                    name="cube-outline"
+                    size={18}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.cardTitle}>Thông tin lô hàng</Text>
+                </View>
+                <View style={styles.cardContent}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Mã lô</Text>
+                    <Text style={styles.detailValue}>{product.productBatch.batchCode}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Ngày sản xuất</Text>
+                    <Text style={styles.detailValue}>
+                      {new Date(product.productBatch.manufactureDate).toLocaleDateString("vi-VN")}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Ngày nhận</Text>
+                    <Text style={styles.detailValue}>
+                      {new Date(product.productBatch.receivedDate).toLocaleDateString("vi-VN")}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>SL nhận</Text>
+                    <Text style={styles.detailValue}>{product.productBatch.quantityReceived} {product.productBatch.productVariant.unit}</Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>SL còn lại</Text>
+                    <Text style={styles.detailValue}>{product.productBatch.quantityRemaining} {product.productBatch.productVariant.unit}</Text>
+                  </View>
                 </View>
               </View>
 
@@ -399,10 +469,10 @@ export default function GoodsDetail({
                     <View style={styles.categoryInfo}>
                       <Text style={styles.categoryLabel}>Danh mục</Text>
                       <Text style={styles.categoryValue}>
-                        {product.productCategory.name}
+                        {product.productBatch.productVariant.product.productCategory.name}
                       </Text>
                       <Text style={styles.categoryDesc}>
-                        {product.productCategory.description}
+                        {product.productBatch.productVariant.product.productCategory.description}
                       </Text>
                     </View>
                   </View>
@@ -418,17 +488,17 @@ export default function GoodsDetail({
                     <View style={styles.categoryInfo}>
                       <Text style={styles.categoryLabel}>Nhóm sản phẩm</Text>
                       <Text style={styles.categoryValue}>
-                        {product.productGroup.name}
+                        {product.productBatch.productVariant.product.productGroup.name}
                       </Text>
                       <Text style={styles.categoryDesc}>
-                        {product.productGroup.description}
+                        {product.productBatch.productVariant.product.productGroup.description}
                       </Text>
                       <View style={styles.taxRow}>
                         <Text style={styles.taxText}>
-                          GTGT: {product.productGroup.gtgttax}%
+                          GTGT: {product.productBatch.productVariant.product.productGroup.gtgttax}%
                         </Text>
                         <Text style={styles.taxText}>
-                          TNCN: {product.productGroup.tncnntax}%
+                          TNCN: {product.productBatch.productVariant.product.productGroup.tncnntax}%
                         </Text>
                       </View>
                     </View>
@@ -445,10 +515,10 @@ export default function GoodsDetail({
                     <View style={styles.categoryInfo}>
                       <Text style={styles.categoryLabel}>Thương hiệu</Text>
                       <Text style={styles.categoryValue}>
-                        {product.brand.name}
+                        {product.productBatch.productVariant.product.brand.name}
                       </Text>
                       <Text style={styles.categoryDesc}>
-                        {product.brand.description}
+                        {product.productBatch.productVariant.product.brand.description}
                       </Text>
                     </View>
                   </View>
@@ -456,7 +526,7 @@ export default function GoodsDetail({
               </View>
 
               {/* Tags */}
-              {product.tags && product.tags.length > 0 && (
+              {product.productBatch.productVariant.product.tags && product.productBatch.productVariant.product.tags.length > 0 && (
                 <View style={styles.card}>
                   <View style={styles.cardHeader}>
                     <MaterialCommunityIcons
@@ -468,7 +538,7 @@ export default function GoodsDetail({
                   </View>
                   <View style={styles.cardContent}>
                     <View style={styles.tagsContainer}>
-                      {product.tags.map((tag) => (
+                      {product.productBatch.productVariant.product.tags.map((tag) => (
                         <View key={tag.id} style={styles.tag}>
                           <Text style={styles.tagText}>{tag.name}</Text>
                         </View>
@@ -490,17 +560,17 @@ export default function GoodsDetail({
                 </View>
                 <View style={styles.cardContent}>
                   <Text style={styles.warehouseName}>
-                    {product.warehouse.name}
+                    {product.warehouseStock.warehouse.name}
                   </Text>
                   <Text style={styles.warehouseAddress}>
-                    {product.warehouse.address}
+                    {product.warehouseStock.warehouse.address}
                   </Text>
                   <View
                     style={[
                       styles.warehouseTypeBadge,
                       {
                         backgroundColor:
-                          product.warehouse.type === "MAIN"
+                          product.warehouseStock.warehouse.type === "MAIN"
                             ? COLORS.primary + "15"
                             : COLORS.warning + "15",
                       },
@@ -511,13 +581,13 @@ export default function GoodsDetail({
                         styles.warehouseTypeText,
                         {
                           color:
-                            product.warehouse.type === "MAIN"
+                            product.warehouseStock.warehouse.type === "MAIN"
                               ? COLORS.primary
                               : COLORS.warning,
                         },
                       ]}
                     >
-                      {product.warehouse.type === "MAIN"
+                      {product.warehouseStock.warehouse.type === "MAIN"
                         ? "Kho chính"
                         : "Kho tạm"}
                     </Text>
@@ -525,8 +595,91 @@ export default function GoodsDetail({
                 </View>
               </View>
 
+              {/* Documents */}
+              {product.productBatch.productVariant.documents && product.productBatch.productVariant.documents.length > 0 && (
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <MaterialCommunityIcons
+                      name="file-document-multiple"
+                      size={18}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.cardTitle}>Tài liệu</Text>
+                  </View>
+                  <View style={styles.cardContent}>
+                    {product.productBatch.productVariant.documents.map((document, index) => (
+                      <View key={document.id} style={[styles.documentItem, index === product.productBatch.productVariant.documents.length - 1 && { borderBottomWidth: 0 }]}>
+                        <View style={styles.documentIcon}>
+                          <MaterialCommunityIcons
+                            name="file-pdf-box"
+                            size={20}
+                            color={COLORS.error}
+                          />
+                        </View>
+                        <View style={styles.documentInfo}>
+                          <Text style={styles.documentName}>{document.fileName}</Text>
+                          <Text style={styles.documentDate}>
+                            {new Date(document.uploadedAt).toLocaleDateString('vi-VN')}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Supplier Info */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <MaterialCommunityIcons
+                    name="account-tie"
+                    size={18}
+                    color={COLORS.primary}
+                  />
+                  <Text style={styles.cardTitle}>Nhà cung cấp</Text>
+                </View>
+                <View style={styles.cardContent}>
+                  <View style={styles.supplierHeader}>
+                    <View style={styles.supplierIcon}>
+                      <MaterialCommunityIcons
+                        name="domain"
+                        size={20}
+                        color={COLORS.primary}
+                      />
+                    </View>
+                    <View style={styles.supplierMainInfo}>
+                      <Text style={styles.supplierName}>{product.productBatch.productVariant.supplier.name}</Text>
+                      <Text style={styles.supplierCode}>Mã: {product.productBatch.productVariant.supplier.code}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.supplierDetails}>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Địa chỉ</Text>
+                      <Text style={styles.detailValue}>{product.productBatch.productVariant.supplier.address}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Điện thoại</Text>
+                      <Text style={styles.detailValue}>{product.productBatch.productVariant.supplier.phoneNumber}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Email</Text>
+                      <Text style={styles.detailValue}>{product.productBatch.productVariant.supplier.email}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Mã số thuế</Text>
+                      <Text style={styles.detailValue}>{product.productBatch.productVariant.supplier.taxCode}</Text>
+                    </View>
+                    <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
+                      <Text style={styles.detailLabel}>Hạn thanh toán</Text>
+                      <Text style={styles.detailValue}>{product.productBatch.productVariant.supplier.paymentTermDays} ngày</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
               {/* Description */}
-              {product.description && (
+              {product.productBatch.productVariant.product.description && (
                 <View style={styles.card}>
                   <View style={styles.cardHeader}>
                     <MaterialCommunityIcons
@@ -538,7 +691,7 @@ export default function GoodsDetail({
                   </View>
                   <View style={styles.cardContent}>
                     <Text style={styles.descriptionText}>
-                      {product.description}
+                      {product.productBatch.productVariant.product.description}
                     </Text>
                   </View>
                 </View>
@@ -554,7 +707,7 @@ export default function GoodsDetail({
                   />
                   <Text style={styles.footerLabel}>Ngày tạo:</Text>
                   <Text style={styles.footerValue}>
-                    {new Date(product.createdAt).toLocaleDateString("vi-VN")}
+                    {new Date(product.productBatch.createdAt).toLocaleDateString("vi-VN")}
                   </Text>
                 </View>
                 <View style={styles.footerDivider} />
@@ -566,7 +719,7 @@ export default function GoodsDetail({
                   />
                   <Text style={styles.footerLabel}>Cập nhật:</Text>
                   <Text style={styles.footerValue}>
-                    {new Date(product.updatedAt).toLocaleDateString("vi-VN")}
+                    {new Date(product.productBatch.updatedAt).toLocaleDateString("vi-VN")}
                   </Text>
                 </View>
               </View>
@@ -972,5 +1125,88 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: COLORS.success,
+  },
+  documentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  documentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.gray50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  documentInfo: {
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.gray800,
+    marginBottom: 4,
+  },
+  documentDate: {
+    fontSize: 12,
+    color: COLORS.gray600,
+  },
+  supplierHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  supplierIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primary + "15",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  supplierMainInfo: {
+    flex: 1,
+  },
+  supplierName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.gray800,
+    marginBottom: 4,
+  },
+  supplierCode: {
+    fontSize: 12,
+    color: COLORS.gray600,
+  },
+  supplierDetails: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+  },
+  stockDetails: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+  },
+  attributesContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  attributeItem: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.gray800,
+    marginBottom: 2,
+  },
+  warehouseDesc: {
+    fontSize: 13,
+    color: COLORS.gray600,
+    lineHeight: 18,
+    marginBottom: 15,
   },
 });

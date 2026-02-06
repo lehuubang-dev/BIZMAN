@@ -449,28 +449,6 @@ class ProductService {
   }
 
   /**
-   * Get product variants by supplier ID
-   */
-  async getProductVariantsBySupplierId(supplierId: string): Promise<any[]> {
-    try {
-      const response = await apiClient.get<any>(
-        `/api/v1/products/get-product-variant-by-supplier-id?supplierId=${supplierId}`
-      );
-      
-      if (response?.data && Array.isArray(response.data)) {
-        return response.data;
-      }
-      if (response?.data?.content && Array.isArray(response.data.content)) {
-        return response.data.content;
-      }
-      return [];
-    } catch (error: any) {
-      console.error('Error fetching product variants by supplier:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Get product variant by ID
    */
   async getProductVariantById(variantId: string): Promise<any | null> {
@@ -508,7 +486,7 @@ class ProductService {
   }
 
   /**
-   * Search product variants by keyword
+   * Search product variants by keyword using API endpoint
    */
   async searchProductVariants(keyword: string): Promise<any[]> {
     try {
@@ -516,30 +494,91 @@ class ProductService {
         return this.getProductVariants();
       }
       
-      console.log('🔍 Searching product variants with keyword:', keyword);
+      console.log('🔍 Searching product variants via API with keyword:', keyword);
       
-      // Get all variants first, then filter by keyword
-      const allVariants = await this.getProductVariants();
-      console.log('📦 Retrieved variants for search:', allVariants.length);
+      const response = await apiClient.get<any>(
+        `/api/v1/products/search-product-variants?search=${encodeURIComponent(keyword)}`
+      );
+      console.log('📦 Search product variants API response:', response);
       
-      const filteredVariants = allVariants.filter((variant: any) => {
-        const searchStr = keyword.toLowerCase().trim();
-        const searchFields = [
-          variant?.name?.toLowerCase() || '',
-          variant?.sku?.toLowerCase() || '',
-          variant?.model?.toLowerCase() || '',
-          variant?.partNumber?.toLowerCase() || '',
-          variant?.product?.name?.toLowerCase() || '',
-          variant?.product?.code?.toLowerCase() || ''
-        ];
-        
-        return searchFields.some(field => field.includes(searchStr));
-      });
+      // Handle paginated API response format: { success, code, message, data: { content: [...] } }
+      if (response?.success && response?.data?.content && Array.isArray(response.data.content)) {
+        console.log('✅ Found variants in paginated search response:', response.data.content.length);
+        return response.data.content;
+      }
       
-      console.log('🎯 Filtered variants:', filteredVariants.length);
-      return filteredVariants;
+      // Handle API response format: { success, code, message, data: [...] }
+      if (response?.success && response?.data && Array.isArray(response.data)) {
+        console.log('✅ Found variants in search response.data:', response.data.length);
+        return response.data;
+      }
+      
+      // Fallback: direct array in data
+      if (response?.data && Array.isArray(response.data)) {
+        console.log('✅ Found variants in search response.data (fallback):', response.data.length);
+        return response.data;
+      }
+      
+      // Fallback: paginated format without success flag 
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        console.log('✅ Found variants in paginated search response (no success):', response.data.content.length);
+        return response.data.content;
+      }
+      
+      // Fallback: direct array response
+      if (Array.isArray(response)) {
+        console.log('✅ Found variants in search response (direct array):', response.length);
+        return response;
+      }
+      
+      console.warn('⚠️ Unexpected search variants response format:', response);
+      return [];
     } catch (error: any) {
       console.error('❌ Error searching product variants:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get product variants filtered by supplier ID
+   */
+  async getProductVariantsBySupplierId(supplierId: string): Promise<any[]> {
+    try {
+      console.log('🔍 Getting product variants by supplier ID:', supplierId);
+      
+      const response = await apiClient.get<any>(
+        `/api/v1/products/get-product-variant-by-supplier-id?supplierId=${supplierId}`
+      );
+      console.log('📦 Product variants by supplier API response:', response);
+      
+      // Handle paginated API response format
+      if (response?.success && response?.data?.content && Array.isArray(response.data.content)) {
+        console.log('✅ Found variants by supplier in paginated response:', response.data.content.length);
+        return response.data.content;
+      }
+      
+      // Handle API response format: { success, code, message, data: [...] }
+      if (response?.success && response?.data && Array.isArray(response.data)) {
+        console.log('✅ Found variants by supplier in response.data:', response.data.length);
+        return response.data;
+      }
+      
+      // Fallback: direct array in data
+      if (response?.data && Array.isArray(response.data)) {
+        console.log('✅ Found variants by supplier in response.data (fallback):', response.data.length);
+        return response.data;
+      }
+      
+      // Fallback: paginated format without success flag
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        console.log('✅ Found variants by supplier in paginated response (no success):', response.data.content.length);
+        return response.data.content;
+      }
+      
+      console.warn('⚠️ Unexpected variants by supplier response format:', response);
+      return [];
+    } catch (error: any) {
+      console.error('❌ Error getting product variants by supplier:', error);
       throw error;
     }
   }
@@ -625,6 +664,58 @@ class ProductService {
         console.error('Error response:', error.response);
       }
       throw new Error(error?.message || 'Không thể tải ảnh lên');
+    }
+  }
+
+  /**
+   * Upload document for user
+   */
+  async uploadDocument(file: any): Promise<{id: string, fileName: string, filePath: string, uploadedAt: string}> {
+    try {
+      console.log('📎 Uploading document:', { name: file.name, type: file.type, size: file.size });
+      
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri || file.path,
+        type: file.type || 'application/pdf',
+        name: file.name,
+      } as any);
+      
+      const response = await apiClient.post<any>('/api/v1/user/upload-document', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      console.log('✅ Document upload response:', response);
+      
+      // API response format: { id, createdAt, updatedAt, fileName, filePath, uploadedAt }
+      if (response?.id && response?.fileName && response?.filePath) {
+        return {
+          id: response.id,
+          fileName: response.fileName,
+          filePath: response.filePath,
+          uploadedAt: response.uploadedAt
+        };
+      }
+      
+      // Handle wrapped response
+      if (response?.data?.id && response?.data?.fileName && response?.data?.filePath) {
+        return {
+          id: response.data.id,
+          fileName: response.data.fileName,
+          filePath: response.data.filePath,
+          uploadedAt: response.data.uploadedAt
+        };
+      }
+      
+      throw new Error('Phản hồi không hợp lệ từ server');
+    } catch (error: any) {
+      console.error('❌ Error uploading document:', {
+        message: error?.message,
+        response: error?.response?.data,
+      });
+      throw new Error(error?.message || 'Không thể tải lên tài liệu');
     }
   }
 }

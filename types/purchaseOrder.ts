@@ -156,15 +156,15 @@ export interface PurchaseOrderListItem {
 }
 
 export interface CreatePurchaseOrderProduct {
-  id: string;
+  variantId: string;
   quantity: number;
   unitPrice: number;
-  expiredDate?: string;
-  discountPercent: number;
-  taxPercent: number;
+  taxRate: number;
+  taxAmount: number;
+  discountRate: number;
+  discountAmount: number;
+  subTotal: number;
   totalPrice: number;
-  finalPrice: number;
-  purchaseValue: number;
   note?: string;
 }
 
@@ -174,13 +174,11 @@ export interface CreatePurchaseOrderData {
   contract?: string;
   products: CreatePurchaseOrderProduct[];
   documents?: string[];
-  orderNumber: string;
   orderDate: string;
   description?: string;
   note?: string;
   subTotal: number;
   taxAmount: number;
+  discountAmount: number;
   totalAmount: number;
-  paymentStatus?: PaymentStatus;
-  orderStatus: OrderStatus;
 }

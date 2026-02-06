@@ -8,11 +8,13 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { productService } from '../../../services/productService';
-import { ProductVariant, UpdateProductVariantRequest } from '../../../types/product';
+import { ProductVariant, UpdateProductVariantRequest, Product } from '../../../types/product';
 import { COLORS } from '../../../constants/colors';
+import DialogNotification from '../common/DialogNotification';
 
 interface ProductVariantUpdateProps {
   variant: ProductVariant;
@@ -27,6 +29,21 @@ export default function ProductVariantUpdate({
 }: ProductVariantUpdateProps) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  
+  // Product selection
+  const [products, setProducts] = useState<Product[]>([]);
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  
+  // Document upload
+  const [uploadedDocuments, setUploadedDocuments] = useState<{id: string, name: string, url: string}[]>([]);
+  
+  // Dialog notification
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogType, setDialogType] = useState<'success' | 'error'>('success');
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogMessage, setDialogMessage] = useState('');
 
   const [formData, setFormData] = useState<UpdateProductVariantRequest>({
     id: variant.id,
@@ -37,11 +54,129 @@ export default function ProductVariantUpdate({
     attributes: variant.attributes || {},
     unit: variant.unit,
     standardCost: variant.standardCost,
-    documentIds: [],
+    documentIds: variant.documents?.map(d => d.id) || [],
   });
 
   const [attributeKey, setAttributeKey] = useState('');
   const [attributeValue, setAttributeValue] = useState('');
+
+  // Load products and documents on mount
+  useEffect(() => {
+    loadProducts();
+    loadExistingDocuments();
+  }, []);
+
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      const productsList = await productService.getProducts();
+      setProducts(productsList);
+      
+      // Set selected product from variant
+      if (variant.product) {
+        setSelectedProduct(variant.product);
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+      showDialog('error', 'Lỗi', 'Không thể tải danh sách sản phẩm');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadExistingDocuments = () => {
+    if (variant.documents && variant.documents.length > 0) {
+      const docs = variant.documents.map(doc => ({
+        id: doc.id,
+        name: doc.fileName || `Document_${doc.id}`,
+        url: doc.filePath || ''
+      }));
+      setUploadedDocuments(docs);
+    }
+  };
+
+  const showDialog = (type: 'success' | 'error', title: string, message: string) => {
+    setDialogType(type);
+    setDialogTitle(title);
+    setDialogMessage(message);
+    setDialogVisible(true);
+  };
+
+  const handleSelectProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setFormData(prev => ({ ...prev, productId: product.id }));
+    setShowProductPicker(false);
+  };
+
+  const handleUploadDocument = async () => {
+    try {
+      setUploadingDocument(true);
+      
+      // Import DocumentPicker from Expo
+      const DocumentPicker = require('expo-document-picker');
+      
+      // Chọn tài liệu từ máy
+      const pickerResult = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'image/*',
+          'text/plain',
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      
+      if (pickerResult.canceled) {
+        console.log('🚪 User cancelled document picker');
+        return;
+      }
+      
+      const selectedFile = pickerResult.assets[0];
+      
+      // Tạo file object cho API
+      const fileForUpload = {
+        uri: selectedFile.uri,
+        type: selectedFile.mimeType || 'application/pdf',
+        name: selectedFile.name,
+        size: selectedFile.size,
+      };
+      
+      console.log('📎 Starting document upload...', selectedFile.name);
+      const uploadedDoc = await productService.uploadDocument(fileForUpload);
+      
+      const newDocument = {
+        id: uploadedDoc.id,
+        name: uploadedDoc.fileName,
+        url: uploadedDoc.filePath
+      };
+      
+      const newDocuments = [...uploadedDocuments, newDocument];
+      setUploadedDocuments(newDocuments);
+      setFormData(prev => ({ ...prev, documentIds: newDocuments.map(d => d.id) }));
+      
+      console.log('✅ Document uploaded successfully:', newDocument);
+      showDialog('success', 'Thành công', `Tài liệu "${uploadedDoc.fileName}" đã được tải lên thành công`);
+      
+      // Tự động đóng thông báo sau 2 giây
+      setTimeout(() => {
+        setDialogVisible(false);
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('❌ Document upload failed:', error);
+      showDialog('error', 'Lỗi', error?.message || 'Không thể tải lên tài liệu. Vui lòng thử lại.');
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleRemoveDocument = (documentId: string) => {
+    const newDocuments = uploadedDocuments.filter(d => d.id !== documentId);
+    setUploadedDocuments(newDocuments);
+    setFormData(prev => ({ ...prev, documentIds: newDocuments.map(d => d.id) }));
+  };
 
   const handleAddAttribute = () => {
     if (attributeKey.trim() && attributeValue.trim()) {
@@ -67,12 +202,12 @@ export default function ProductVariantUpdate({
 
   const handleSubmit = async () => {
     if (!formData.name.trim() || !formData.sku.trim()) {
-      Alert.alert('Lỗi', 'Vui lòng điền tên và SKU cho biến thể');
+      showDialog('error', 'Lỗi', 'Vui lòng điền tên và SKU cho biến thể');
       return;
     }
 
     if (formData.standardCost <= 0) {
-      Alert.alert('Lỗi', 'Vui lòng nhập giá chuẩn hợp lệ');
+      showDialog('error', 'Lỗi', 'Vui lòng nhập giá chuẩn hợp lệ');
       return;
     }
 
@@ -80,22 +215,29 @@ export default function ProductVariantUpdate({
     try {
       const response = await productService.updateProductVariant(formData);
       
-      if (response?.data) {
-        Alert.alert('Thành công', 'Cập nhật biến thể sản phẩm thành công', [
-          { text: 'OK', onPress: () => {
-            onSuccess?.();
-            onClose();
-          }}
-        ]);
+      if (response?.data || response) {
+        // Hiển thị thông báo thành công tự động đóng
+        showDialog('success', 'Thành công', 'Cập nhật biến thể sản phẩm thành công');
+        
+        // Tự động đóng modal và refresh danh sách sau 1.5 giây
+        setTimeout(() => {
+          onSuccess?.();
+          onClose();
+        }, 1500);
       } else {
         throw new Error('Không có dữ liệu phản hồi');
       }
     } catch (err: any) {
       console.error('Update variant error:', err);
-      Alert.alert('Lỗi', err?.message || 'Không thể cập nhật biến thể sản phẩm');
+      showDialog('error', 'Lỗi', err?.message || 'Không thể cập nhật biến thể sản phẩm');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleDialogClose = () => {
+    setDialogVisible(false);
+    // Chỉ đóng dialog, success sẽ tự động xử lý
   };
 
   const handleCostChange = (text: string) => {
@@ -122,6 +264,29 @@ export default function ProductVariantUpdate({
           {/* Basic Information */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
+            
+            {/* Product Selection */}
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                Sản phẩm <Text style={styles.required}>*</Text>
+              </Text>
+              <TouchableOpacity 
+                style={[styles.input, styles.productSelector]}
+                onPress={() => setShowProductPicker(true)}
+              >
+                {selectedProduct ? (
+                  <View style={styles.productSelected}>
+                    <MaterialCommunityIcons name="package-variant-closed" size={20} color={COLORS.primary} />
+                    <Text style={styles.productSelectedText}>{selectedProduct.name}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.productPlaceholder}>
+                    <MaterialCommunityIcons name="plus" size={20} color={COLORS.gray400} />
+                    <Text style={styles.placeholderText}>Chọn sản phẩm</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
             
             <View style={styles.field}>
               <Text style={styles.label}>
@@ -201,6 +366,53 @@ export default function ProductVariantUpdate({
             </View>
           </View>
 
+          {/* Documents */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Tài liệu đính kèm</Text>
+            
+            {/* Upload Button */}
+            <TouchableOpacity 
+              style={styles.uploadButton}
+              onPress={handleUploadDocument}
+              disabled={uploadingDocument}
+            >
+              {uploadingDocument ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <MaterialCommunityIcons name="cloud-upload" size={20} color={COLORS.primary} />
+              )}
+              <Text style={styles.uploadButtonText}>
+                {uploadingDocument ? 'Đang tải lên...' : 'Tải lên tài liệu'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Document List */}
+            {uploadedDocuments.length > 0 && (
+              <View style={styles.documentsList}>
+                {uploadedDocuments.map((doc) => (
+                  <View key={doc.id} style={styles.documentItem}>
+                    <View style={styles.documentInfo}>
+                      <MaterialCommunityIcons name="file-document" size={20} color={COLORS.primary} />
+                      <Text style={styles.documentName}>{doc.name}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.removeDocumentBtn}
+                      onPress={() => handleRemoveDocument(doc.id)}
+                    >
+                      <MaterialCommunityIcons name="close" size={18} color={COLORS.error} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {uploadedDocuments.length === 0 && (
+              <Text style={styles.emptyDocumentsText}>
+                Chưa có tài liệu nào. Tải lên tài liệu liên quan đến biến thể.
+              </Text>
+            )}
+          </View>
+
           {/* Attributes */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thuộc tính</Text>
@@ -267,6 +479,71 @@ export default function ProductVariantUpdate({
           </TouchableOpacity>
         </ScrollView>
       </View>
+      
+      {/* Product Picker Modal */}
+      {showProductPicker && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chọn sản phẩm</Text>
+              <TouchableOpacity onPress={() => setShowProductPicker(false)}>
+                <MaterialCommunityIcons name="close" size={24} color={COLORS.gray600} />
+              </TouchableOpacity>
+            </View>
+            
+            {loading ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text>Đang tải danh sách sản phẩm...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={products}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.productItem,
+                      selectedProduct?.id === item.id && styles.productItemSelected
+                    ]}
+                    onPress={() => handleSelectProduct(item)}
+                  >
+                    <MaterialCommunityIcons 
+                      name="package-variant-closed" 
+                      size={20} 
+                      color={COLORS.primary} 
+                    />
+                    <View style={styles.productItemInfo}>
+                      <Text style={styles.productItemName}>{item.name}</Text>
+                      <Text style={styles.productItemCode}>{item.code || item.id}</Text>
+                    </View>
+                    {selectedProduct?.id === item.id && (
+                      <MaterialCommunityIcons name="check" size={20} color={COLORS.success} />
+                    )}
+                  </TouchableOpacity>
+                )}
+                style={styles.productList}
+              />
+            )}
+          </View>
+        </View>
+      )}
+      
+      {/* Dialog Notification */}
+      <DialogNotification
+        visible={dialogVisible}
+        type={dialogType}
+        title={dialogTitle}
+        message={dialogMessage}
+        actions={dialogType === 'error' ? [
+          {
+            text: 'OK',
+            onPress: handleDialogClose,
+            style: 'default',
+          },
+        ] : []} // Không hiển thị nút OK khi thành công
+        onDismiss={dialogType === 'error' ? handleDialogClose : undefined} // Không cho phép đóng bằng tap outside khi thành công
+      />
     </View>
   );
 }
@@ -414,5 +691,150 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 15,
     fontWeight: '700',
+  },
+  // Product Selector
+  productSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  productSelected: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  productSelectedText: {
+    fontSize: 14,
+    color: COLORS.gray800,
+    fontWeight: '600',
+  },
+  productPlaceholder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: COLORS.gray400,
+  },
+  // Document Upload
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    backgroundColor: COLORS.primary + '10',
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  documentsList: {
+    gap: 8,
+    marginTop: 8,
+  },
+  documentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.white,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  documentInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 14,
+    color: COLORS.gray800,
+    fontWeight: '500',
+  },
+  removeDocumentBtn: {
+    padding: 4,
+  },
+  emptyDocumentsText: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  // Modal
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 300,
+  },
+  modalContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    width: '90%',
+    maxHeight: '70%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.gray800,
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: 'center',
+    gap: 16,
+  },
+  productList: {
+    maxHeight: 400,
+  },
+  productItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  productItemSelected: {
+    backgroundColor: COLORS.primary + '10',
+  },
+  productItemInfo: {
+    flex: 1,
+  },
+  productItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.gray800,
+  },
+  productItemCode: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginTop: 2,
   },
 });

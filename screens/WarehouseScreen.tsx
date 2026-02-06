@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,6 +13,7 @@ import WarehouseList from './components/warehouse/WarehouseList';
 import WarehouseDetail from './components/warehouse/WarehouseDetail';
 import WarehouseCreate from './components/warehouse/WarehouseCreate';
 import WarehouseUpdate from './components/warehouse/WarehouseUpdate';
+import DialogNotification from './components/common/DialogNotification';
 import { warehouseService } from '../services/warehouseService';
 import { Warehouse } from '../types/warehouse';
 
@@ -34,11 +35,28 @@ export default function WarehouseScreen() {
   const [selectedWarehouse, setSelectedWarehouse] = useState<Warehouse | null>(null);
   const [searchText, setSearchText] = useState('');
   const [searching, setSearching] = useState(false);
+  
+  // Dialog notification state
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogType, setDialogType] = useState<'success' | 'error' | 'confirm'>('success');
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogMessage, setDialogMessage] = useState('');
+  
+  // Ref to store pending delete action
+  const pendingDeleteActionRef = useRef<(() => Promise<void>) | null>(null);
 
 
   useEffect(() => {
     loadWarehouses();
   }, []);
+
+  // Helper function to show dialog notification
+  const showDialog = (type: 'success' | 'error', title: string, message: string) => {
+    setDialogType(type);
+    setDialogTitle(title);
+    setDialogMessage(message);
+    setDialogVisible(true);
+  };
 
   const loadWarehouses = async () => {
     console.log('loadWarehouses called');
@@ -46,7 +64,13 @@ export default function WarehouseScreen() {
     try {
       const data = await warehouseService.getWarehouses();
       console.log('Loaded warehouses:', data.length, 'items');
-      setWarehouses(data);
+      // Sort warehouses by creation date (newest first)
+      const sortedData = data.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      setWarehouses(sortedData);
     } catch (error) {
       console.error('Load warehouses error:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách kho hàng');
@@ -71,10 +95,16 @@ export default function WarehouseScreen() {
       const data = await warehouseService.searchWarehouses(text.trim());
       console.log('Search results received:', data);
       console.log('Setting warehouses to:', data.length, 'items');
-      setWarehouses(data);
+      // Sort search results by creation date (newest first)
+      const sortedData = data.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      setWarehouses(sortedData);
     } catch (err: any) {
       console.error('Search error:', err);
-      Alert.alert('Lỗi', err?.message || 'Không thể tìm kiếm kho hàng');
+      showDialog('error', 'Lỗi', err?.message || 'Không thể tìm kiếm kho hàng');
       // On search error, fallback to showing all warehouses
       console.log('Search failed, loading all warehouses as fallback');
       await loadWarehouses();
@@ -102,13 +132,12 @@ export default function WarehouseScreen() {
     try {
       await warehouseService.createWarehouse(data);
       setShowCreate(false);
-      // Clear search and reload all warehouses after successful create
+      // Clear search and reload all warehouses to ensure proper sorting
       setSearchText('');
       await loadWarehouses();
-      Alert.alert('Thành công', 'Đã tạo kho hàng thành công');
     } catch (error) {
       console.error('Create warehouse error:', error);
-      Alert.alert('Lỗi', 'Không thể tạo kho hàng');
+      showDialog('error', 'Lỗi', 'Không thể tạo kho hàng');
     }
   };
 
@@ -118,48 +147,47 @@ export default function WarehouseScreen() {
       setShowUpdate(false);
       setShowDetail(false);
       setSelectedWarehouse(null);
-      // Refresh current view (search or all warehouses)
+      
+      // Refresh current view (search or all warehouses) to ensure proper sorting
       if (searchText.trim()) {
         await handleSearch(searchText);
       } else {
         await loadWarehouses();
       }
-      Alert.alert('Thành công', 'Đã cập nhật kho hàng thành công');
     } catch (error) {
       console.error('Update warehouse error:', error);
-      Alert.alert('Lỗi', 'Không thể cập nhật kho hàng');
+      showDialog('error', 'Lỗi', 'Không thể cập nhật kho hàng');
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
-    Alert.alert(
-      'Xác nhận xóa',
-      `Bạn có chắc muốn xóa kho "${name}"?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await warehouseService.deleteWarehouse(id);
-              setShowDetail(false);
-              setSelectedWarehouse(null);
-              // Refresh current view (search or all warehouses)
-              if (searchText.trim()) {
-                await handleSearch(searchText);
-              } else {
-                await loadWarehouses();
-              }
-              Alert.alert('Thành công', 'Đã xóa kho hàng thành công');
-            } catch (error) {
-              console.error('Delete warehouse error:', error);
-              Alert.alert('Lỗi', 'Không thể xóa kho hàng');
-            }
-          },
-        },
-      ]
-    );
+    // Show confirmation dialog
+    setDialogType('confirm');
+    setDialogTitle('Xác nhận xóa');
+    setDialogMessage(`Bạn có chắc muốn xóa kho "${name}"?`);
+    setDialogVisible(true);
+    
+    // Store delete action for confirmation
+    const confirmDelete = async () => {
+      try {
+        await warehouseService.deleteWarehouse(id);
+        setShowDetail(false);
+        setSelectedWarehouse(null);
+        
+        // Refresh current view (search or all warehouses)
+        if (searchText.trim()) {
+          await handleSearch(searchText);
+        } else {
+          await loadWarehouses();
+        }
+      } catch (error) {
+        console.error('Delete warehouse error:', error);
+        showDialog('error', 'Lỗi', 'Không thể xóa kho hàng');
+      }
+    };
+    
+    // Store the delete function for use in dialog actions
+    pendingDeleteActionRef.current = confirmDelete;
   };
 
   const handleUpdate = (warehouse: Warehouse) => {
@@ -250,6 +278,49 @@ export default function WarehouseScreen() {
         onClose={() => {
           setShowDetail(false);
           setSelectedWarehouse(null);
+        }}
+      />
+
+      <DialogNotification
+        visible={dialogVisible}
+        type={dialogType}
+        title={dialogTitle}
+        message={dialogMessage}
+        actions={
+          dialogType === 'confirm' 
+            ? [
+                {
+                  text: 'Hủy',
+                  style: 'cancel',
+                  onPress: () => {
+                    setDialogVisible(false);
+                    pendingDeleteActionRef.current = null;
+                  }
+                },
+                {
+                  text: 'Xóa',
+                  style: 'destructive',
+                  onPress: () => {
+                    setDialogVisible(false);
+                    const deleteAction = pendingDeleteActionRef.current;
+                    if (deleteAction) {
+                      deleteAction();
+                      pendingDeleteActionRef.current = null;
+                    }
+                  }
+                }
+              ]
+            : [
+                {
+                  text: 'Đóng',
+                  style: 'default',
+                  onPress: () => setDialogVisible(false)
+                }
+              ]
+        }
+        onDismiss={() => {
+          setDialogVisible(false);
+          pendingDeleteActionRef.current = null;
         }}
       />
     </View>

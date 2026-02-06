@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { Warehouse, WarehouseProduct, ProductDetail } from '../types/warehouse';
+import { Warehouse, WarehouseProduct, ProductDetail, WarehouseStockItem } from '../types/warehouse';
 
 class WarehouseService {
   /**
@@ -81,19 +81,17 @@ class WarehouseService {
   /**
    * Get products in warehouse
    */
-  async getWarehouseProducts(warehouseId: string): Promise<WarehouseProduct[]> {
+  async getWarehouseProducts(warehouseId: string, page = 0, size = 20): Promise<WarehouseStockItem[]> {
     try {
       const response = await apiClient.get<any>(
-        `/api/v1/warehouses/get-products-warehouse?warehouseId=${warehouseId}`
+        `/api/v1/warehouses/get-products-warehouse?warehouseId=${warehouseId}&page=${page}&size=${size}&sort=createdAt,desc`
       );
       
-      // Handle paginated response
+      console.log('Warehouse products API response:', response);
+      
+      // Handle new API response format: { success, code, message, data: { content: [...] } }
       if (response?.data?.content && Array.isArray(response.data.content)) {
         return response.data.content;
-      }
-      
-      if (response?.data && Array.isArray(response.data)) {
-        return response.data;
       }
       
       return [];
@@ -106,22 +104,26 @@ class WarehouseService {
   /**
    * Search/filter products in warehouse
    */
-  async searchWarehouseProducts(warehouseId: string, filter: string): Promise<WarehouseProduct[]> {
+  async searchWarehouseProducts(warehouseId: string, filter: string, page = 0, size = 20): Promise<WarehouseStockItem[]> {
     try {
-      const response = await apiClient.get<any>(
-        `/api/v1/warehouses/get-products-warehouse-filter?warehouseId=${warehouseId}&filter=${filter}`
-      );
+      // For now, we'll use the same API and filter client-side
+      // TODO: Update when search API is available
+      const allProducts = await this.getWarehouseProducts(warehouseId, page, size);
       
-      // Handle paginated response
-      if (response?.data?.content && Array.isArray(response.data.content)) {
-        return response.data.content;
+      if (!filter.trim()) {
+        return allProducts;
       }
       
-      if (response?.data && Array.isArray(response.data)) {
-        return response.data;
-      }
-      
-      return [];
+      const searchTerm = filter.toLowerCase();
+      return allProducts.filter(item => {
+        const productName = item.productBatch.productVariant.name.toLowerCase();
+        const sku = item.productBatch.productVariant.sku.toLowerCase();
+        const batchCode = item.productBatch.batchCode.toLowerCase();
+        
+        return productName.includes(searchTerm) || 
+               sku.includes(searchTerm) || 
+               batchCode.includes(searchTerm);
+      });
     } catch (error) {
       console.error('Error searching warehouse products:', error);
       throw error;
@@ -129,14 +131,17 @@ class WarehouseService {
   }
 
   /**
-   * Get product detail by ID
+   * Get product detail by batch ID and warehouse ID
    */
-  async getProductWarehouseById(productId: string, warehouseId: string): Promise<ProductDetail | null> {
+  async getProductWarehouseById(batchId: string, warehouseId: string): Promise<WarehouseStockItem | null> {
     try {
       const response = await apiClient.get<any>(
-        `/api/v1/warehouses/get-product-warehouse-by-id?productId=${productId}&warehouseId=${warehouseId}`
+        `/api/v1/warehouses/get-product-warehouse-by-id?batchId=${batchId}&warehouseId=${warehouseId}`
       );
       
+      console.log('Product warehouse detail API response:', response);
+      
+      // Handle new API response format: { success, code, message, data: {...} }
       if (response?.data) {
         return response.data;
       }

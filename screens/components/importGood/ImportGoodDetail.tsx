@@ -83,7 +83,8 @@ export default function ImportGoodDetail({ visible, orderId, onClose, onApprove 
   };
 
   const renderProductItem = ({ item, index }: { item: any; index: number }) => {
-    const primaryImage = item.images?.find((img: any) => img.isPrimary);
+    // Handle new API structure: item.variant contains product info
+    const variant = item.variant;
     
     return (
       <View style={styles.productCard}>
@@ -92,27 +93,38 @@ export default function ImportGoodDetail({ visible, orderId, onClose, onApprove 
         </View>
         
         <View style={styles.productBody}>
-          {primaryImage && (
-            <Image
-              source={{ uri: `http://192.168.5.109:8080${primaryImage.imageUrl}` }}
-              style={styles.productImage}
-              resizeMode="cover"
-            />
-          )}
+          {/* Placeholder for image - would be implemented when images are available in API */}
+          <View style={styles.productImagePlaceholder}>
+            <MaterialCommunityIcons name="image-outline" size={24} color={COLORS.gray400} />
+          </View>
           
           <View style={styles.productInfo}>
-            <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-            <Text style={styles.productSku}>SKU: {item.sku}</Text>
+            <Text style={styles.productName} numberOfLines={2}>{variant?.name || 'N/A'}</Text>
+            <Text style={styles.productSku}>SKU: {variant?.sku || 'N/A'}</Text>
+            {variant?.model && (
+              <Text style={styles.productModel}>Model: {variant.model}</Text>
+            )}
+            
+            {/* Attributes */}
+            {variant?.attributes && Object.keys(variant.attributes).length > 0 && (
+              <View style={styles.attributesRow}>
+                {Object.entries(variant.attributes).map(([key, value]) => (
+                  <View key={key} style={styles.attributeBadge}>
+                    <Text style={styles.attributeText}>{key}: {String(value)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             
             <View style={styles.productRow}>
               <View style={styles.productBadge}>
-                <Text style={styles.badgeText}>SL: {item.quantity} {item.unit}</Text>
+                <Text style={styles.badgeText}>SL: {item.quantity} {variant?.unit || ''}</Text>
               </View>
               <View style={styles.productBadge}>
-                <Text style={styles.badgeText}>Giảm: {item.discountPercent}%</Text>
+                <Text style={styles.badgeText}>Giảm: {item.discountRate || 0}%</Text>
               </View>
               <View style={styles.productBadge}>
-                <Text style={styles.badgeText}>Thuế: {item.taxPercent}%</Text>
+                <Text style={styles.badgeText}>Thuế: {item.taxRate || 0}%</Text>
               </View>
             </View>
 
@@ -122,9 +134,22 @@ export default function ImportGoodDetail({ visible, orderId, onClose, onApprove 
                 <Text style={styles.priceGridValue}>{formatCurrency(item.unitPrice)}</Text>
               </View>
               <View style={styles.priceGridItem}>
+                <Text style={styles.priceGridLabel}>Tạm tính</Text>
+                <Text style={styles.priceGridValue}>{formatCurrency(item.subTotal)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.priceGrid}>
+              <View style={styles.priceGridItem}>
+                <Text style={styles.priceGridLabel}>Giảm giá</Text>
+                <Text style={[styles.priceGridValue, { color: COLORS.warning }]}>
+                  -{formatCurrency(item.discountAmount || 0)}
+                </Text>
+              </View>
+              <View style={styles.priceGridItem}>
                 <Text style={styles.priceGridLabel}>Thành tiền</Text>
                 <Text style={[styles.priceGridValue, { color: COLORS.success }]}>
-                  {formatCurrency(item.finalPrice)}
+                  {formatCurrency(item.totalPrice)}
                 </Text>
               </View>
             </View>
@@ -206,6 +231,34 @@ export default function ImportGoodDetail({ visible, orderId, onClose, onApprove 
                 </View>
               </View>
 
+              {/* Contract Info */}
+              {order.contract && (
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <MaterialCommunityIcons name="file-document" size={18} color={COLORS.primary} />
+                    <Text style={styles.cardTitle}>Hợp đồng</Text>
+                  </View>
+                  <View style={styles.cardContent}>
+                    <Text style={styles.contractTitle}>{order.contract.title}</Text>
+                    <Text style={styles.contractNumber}>Số HĐ: {order.contract.contractNumber}</Text>
+                    <View style={styles.infoRow}>
+                      <MaterialCommunityIcons name="calendar-range" size={14} color={COLORS.gray600} />
+                      <Text style={styles.infoText}>
+                        {new Date(order.contract.startDate).toLocaleDateString('vi-VN')} - {new Date(order.contract.endDate).toLocaleDateString('vi-VN')}
+                      </Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <MaterialCommunityIcons name="currency-usd" size={14} color={COLORS.gray600} />
+                      <Text style={styles.infoText}>Giá trị: {formatCurrency(order.contract.totalValue)}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.gray600} />
+                      <Text style={styles.infoText}>Hạn thanh toán: {order.contract.paymentTermDays} ngày</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
               {/* Warehouse Info */}
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -215,6 +268,14 @@ export default function ImportGoodDetail({ visible, orderId, onClose, onApprove 
                 <View style={styles.cardContent}>
                   <Text style={styles.warehouseName}>{order.warehouse.name}</Text>
                   <Text style={styles.warehouseAddress}>{order.warehouse.address}</Text>
+                  {order.warehouse.description && (
+                    <Text style={styles.warehouseDesc}>{order.warehouse.description}</Text>
+                  )}
+                  <View style={styles.warehouseTypeBadge}>
+                    <Text style={styles.warehouseTypeText}>
+                      {order.warehouse.type === 'MAIN' ? 'Kho chính' : 'Kho phụ'}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
@@ -233,6 +294,31 @@ export default function ImportGoodDetail({ visible, orderId, onClose, onApprove 
                 />
               </View>
 
+              {/* Documents */}
+              {order.documents && order.documents.length > 0 && (
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <MaterialCommunityIcons name="file-document-multiple" size={18} color={COLORS.primary} />
+                    <Text style={styles.cardTitle}>Tài liệu đính kèm</Text>
+                  </View>
+                  <View style={styles.cardContent}>
+                    {order.documents.map((document, index) => (
+                      <View key={document.id} style={[styles.documentItem, index === order.documents.length - 1 && { borderBottomWidth: 0 }]}>
+                        <View style={styles.documentIcon}>
+                          <MaterialCommunityIcons name="file-pdf-box" size={20} color={COLORS.error} />
+                        </View>
+                        <View style={styles.documentInfo}>
+                          <Text style={styles.documentName}>{document.fileName}</Text>
+                          <Text style={styles.documentDate}>
+                            {new Date(document.uploadedAt).toLocaleDateString('vi-VN')}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
               {/* Summary */}
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -241,15 +327,21 @@ export default function ImportGoodDetail({ visible, orderId, onClose, onApprove 
                 </View>
                 <View style={styles.cardContent}>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Tổng phụ:</Text>
+                    <Text style={styles.summaryLabel}>Tạm tính:</Text>
                     <Text style={styles.summaryValue}>{formatCurrency(order.subTotal)}</Text>
                   </View>
+                  {(order as any).discountAmount && (order as any).discountAmount > 0 && (
+                    <View style={styles.summaryRow}>
+                      <Text style={styles.summaryLabel}>Giảm giá:</Text>
+                      <Text style={[styles.summaryValue, { color: COLORS.warning }]}>-{formatCurrency((order as any).discountAmount)}</Text>
+                    </View>
+                  )}
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Thuế:</Text>
+                    <Text style={styles.summaryLabel}>Thuế VAT:</Text>
                     <Text style={styles.summaryValue}>{formatCurrency(order.taxAmount)}</Text>
                   </View>
                   <View style={[styles.summaryRow, styles.totalRow]}>
-                    <Text style={styles.totalLabel}>Tổng cộng:</Text>
+                    <Text style={styles.totalLabel}>Tổng thanh toán:</Text>
                     <Text style={styles.totalValue}>{formatCurrency(order.totalAmount)}</Text>
                   </View>
                 </View>
@@ -549,5 +641,93 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.white,
+  },
+  productModel: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    marginBottom: 6,
+  },
+  attributesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 8,
+  },
+  attributeBadge: {
+    backgroundColor: COLORS.indigo + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  attributeText: {
+    fontSize: 10,
+    color: COLORS.indigo,
+    fontWeight: '600',
+  },
+  contractTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.gray800,
+    marginBottom: 4,
+  },
+  contractNumber: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  warehouseDesc: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginBottom: 8,
+  },
+  warehouseTypeBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.primary + '15',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  warehouseTypeText: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  documentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+  },
+  documentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.gray50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  documentInfo: {
+    flex: 1,
+  },
+  documentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.gray800,
+    marginBottom: 4,
+  },
+  documentDate: {
+    fontSize: 12,
+    color: COLORS.gray600,
+  },
+  productImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: COLORS.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

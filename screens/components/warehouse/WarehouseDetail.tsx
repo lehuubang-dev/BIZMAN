@@ -16,6 +16,27 @@ import { Warehouse, WarehouseProduct } from '../../../types/warehouse';
 import { warehouseService } from '../../../services/warehouseService';
 import GoodsDetail from './GoodsDetail';
 
+interface WarehouseStockItem {
+  productBatch: {
+    id: string;
+    batchCode: string;
+    expiryDate?: string;
+    productVariant: {
+      name: string;
+      sku: string;
+      unit: string;
+      standardCost: number;
+      product: {
+        images?: Array<{ isPrimary: boolean; imageUrl: string }>;
+      };
+    };
+  };
+  warehouseStock: {
+    quantityOnHand: number;
+    location: string;
+  };
+}
+
 const COLORS = {
   primary: '#2196F3',
   white: '#FFFFFF',
@@ -37,12 +58,12 @@ interface WarehouseDetailProps {
 }
 
 export default function WarehouseDetail({ visible, warehouse, onClose }: WarehouseDetailProps) {
-  const [products, setProducts] = useState<WarehouseProduct[]>([]);
+  const [products, setProducts] = useState<WarehouseStockItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [showGoodsDetail, setShowGoodsDetail] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible && warehouse) {
@@ -94,8 +115,8 @@ export default function WarehouseDetail({ visible, warehouse, onClose }: Warehou
     loadProducts();
   };
 
-  const handleProductPress = (productId: string) => {
-    setSelectedProductId(productId);
+  const handleProductPress = (batchId: string) => {
+    setSelectedBatchId(batchId);
     setShowGoodsDetail(true);
   };
 
@@ -113,47 +134,62 @@ export default function WarehouseDetail({ visible, warehouse, onClose }: Warehou
     return Math.round(value).toLocaleString('vi-VN');
   };
 
-  const renderProductItem = ({ item }: { item: WarehouseProduct }) => {
-    const primaryImage = item.images.find(img => img.isPrimary);
+  const renderProductItem = ({ item }: { item: WarehouseStockItem }) => {
+    // Safely access images array from product
+    const primaryImage = item.productBatch.productVariant.product.images && 
+      Array.isArray(item.productBatch.productVariant.product.images) 
+      ? item.productBatch.productVariant.product.images.find(img => img.isPrimary)
+      : null;
+    
+    const productVariant = item.productBatch.productVariant;
+    const product = productVariant.product;
+    const warehouseStock = item.warehouseStock;
     
     return (
       <TouchableOpacity 
         style={styles.productCard}
-        onPress={() => handleProductPress(item.id)}
+        onPress={() => handleProductPress(item.productBatch.id)}
         activeOpacity={0.7}
       >
         {primaryImage && (
           <Image 
-            source={{ uri: `http://192.168.5.109:8080${primaryImage.imageUrl}` }}
+            source={{ uri: `http://192.168.1.2:8080${primaryImage.imageUrl}` }}
             style={styles.productImage}
             resizeMode="cover"
           />
         )}
         <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-          <Text style={styles.productSku}>SKU: {item.sku}</Text>
+          <Text style={styles.productName} numberOfLines={2}>{productVariant.name}</Text>
+          <Text style={styles.productSku}>SKU: {productVariant.sku}</Text>
           
           <View style={styles.productRow}>
             <View style={styles.productBadge}>
               <MaterialCommunityIcons name="package-variant" size={12} color={COLORS.gray600} />
-              <Text style={styles.badgeText}>SL: {item.quantity} {item.unit}</Text>
+              <Text style={styles.badgeText}>SL: {warehouseStock.quantityOnHand} {productVariant.unit}</Text>
             </View>
             <View style={styles.productBadge}>
               <MaterialCommunityIcons name="map-marker" size={12} color={COLORS.primary} />
-              <Text style={styles.badgeText}>{item.location}</Text>
+              <Text style={styles.badgeText}>{warehouseStock.location}</Text>
             </View>
           </View>
 
-          <Text style={styles.productPrice}>{formatCurrency(item.sellPrice)}</Text>
+          <Text style={styles.productPrice}>{formatCurrency(productVariant.standardCost)}</Text>
 
-          {item.expiredDate && (
+          {item.productBatch.expiryDate && (
             <View style={styles.expiryRow}>
               <MaterialCommunityIcons name="calendar-alert" size={12} color={COLORS.warning} />
               <Text style={styles.expiryText}>
-                HSD: {new Date(item.expiredDate).toLocaleDateString('vi-VN')}
+                HSD: {new Date(item.productBatch.expiryDate).toLocaleDateString('vi-VN')}
               </Text>
             </View>
           )}
+          
+          {/* <View style={styles.expiryRow}>
+            <MaterialCommunityIcons name="cube-outline" size={12} color={COLORS.primary} />
+            <Text style={styles.expiryText}>
+              Batch: {item.productBatch.batchCode}
+            </Text>
+          </View> */}
         </View>
       </TouchableOpacity>
     );
@@ -252,7 +288,7 @@ export default function WarehouseDetail({ visible, warehouse, onClose }: Warehou
               ) : products.length > 0 ? (
                 <FlatList
                   data={products}
-                  keyExtractor={(item, index) => `${item.id}-${index}`}
+                  keyExtractor={(item, index) => `${item.productBatch.id}-${index}`}
                   renderItem={renderProductItem}
                   scrollEnabled={false}
                   ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -289,11 +325,11 @@ export default function WarehouseDetail({ visible, warehouse, onClose }: Warehou
 
       <GoodsDetail
         visible={showGoodsDetail}
-        productId={selectedProductId}
+        batchId={selectedBatchId}
         warehouseId={warehouse?.id || null}
         onClose={() => {
           setShowGoodsDetail(false);
-          setSelectedProductId(null);
+          setSelectedBatchId(null);
         }}
       />
     </Modal>
@@ -413,8 +449,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   productImage: {
-    width: 110,
-    height: 110,
+    width: 120,
+    height: 130,
     borderRadius: 8,
     backgroundColor: COLORS.gray100,
   },

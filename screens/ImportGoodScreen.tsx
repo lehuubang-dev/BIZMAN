@@ -106,6 +106,30 @@ export default function ImportGoodScreen() {
   }
 };
 
+  const handleDelete = async (orderId: string, orderNumber?: string) => {
+    try {
+      console.log('Delete order:', orderNumber);
+      await purchaseOrderService.deletePurchaseOrder(orderId);
+      loadOrders();
+      Alert.alert('Thành công', 'Đã xóa đơn hàng thành công');
+    } catch (error) {
+      console.error('Delete error:', error);
+      Alert.alert('Lỗi', 'Không thể xóa đơn hàng');
+    }
+  };
+
+  const handleCancel = async (orderId: string, orderNumber?: string) => {
+    try {
+      console.log('Cancel order:', orderNumber);
+      await purchaseOrderService.cancelPurchaseOrder(orderId);
+      loadOrders();
+      Alert.alert('Thành công', 'Đã hủy đơn hàng thành công');
+    } catch (error) {
+      console.error('Cancel error:', error);
+      Alert.alert('Lỗi', 'Không thể hủy đơn hàng');
+    }
+  };
+
   const handleCreate = async () => {
     console.log('handleCreate called - refreshing order list...');
     setShowCreate(false);
@@ -152,6 +176,8 @@ export default function ImportGoodScreen() {
         orders={orders}
         onView={handleView}
         onApprove={handleApprove}
+        onDelete={handleDelete}
+        onCancel={handleCancel}
         onCreate={() => setShowCreate(true)}
       />
 

@@ -13,13 +13,62 @@ import {
 import { Picker } from '@react-native-picker/picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { purchaseOrderService } from '../../../services/purchaseOrderService';
+import { contractService } from '../../../services/contractService';
+import { productService } from '../../../services/productService';
 import * as DocumentPicker from 'expo-document-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import DialogNotification from '../common/DialogNotification';
 
 interface ImportGoodUpdateProps {
   visible: boolean;
   orderId: string | null;
   onClose: () => void;
   onUpdated?: () => void;
+}
+
+interface ProductItem {
+  id: string;
+  name?: string;
+  quantity: number;
+  unitPrice: number;
+  discountRate: number;
+  taxRate: number;
+  discountAmount?: number;
+  taxAmount?: number;
+  totalPrice: number;
+  finalPrice: number;
+  purchaseValue: number;
+  note?: string;
+  expiredDate?: string;
+}
+
+type PaymentStatus = "PENDING" | "PARTIAL" | "PAID" | "OVERDUE";
+type OrderStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELLED";
+
+interface CreatePurchaseOrderData {
+  supplier: string;
+  warehouse: string;
+  contract?: string;
+  products: Array<{
+    variantId: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate: number;
+    taxAmount: number;
+    discountRate: number;
+    discountAmount: number;
+    subTotal: number;
+    totalPrice: number;
+    note?: string;
+  }>;
+  documents?: string[];
+  orderDate: string;
+  description?: string;
+  note?: string;
+  subTotal: number;
+  taxAmount: number;
+  discountAmount: number;
+  totalAmount: number;
 }
 
 const COLORS = {
@@ -32,6 +81,7 @@ const COLORS = {
   gray600: '#4B5563',
   gray800: '#1F2937',
   success: '#10B981',
+  warning: '#F59E0B',
   error: '#EF4444',
 };
 
@@ -39,11 +89,32 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [loadingContract, setLoadingContract] = useState(false);
   const [form, setForm] = useState<any>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   // Options for dropdowns
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
+  const [productOptions, setProductOptions] = useState<any[]>([]);
+  const [contractDetail, setContractDetail] = useState<any>(null);
+  const [allProducts, setAllProducts] = useState<any[]>([]);
+
+  // Product form
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [showExpiredDatePicker, setShowExpiredDatePicker] = useState(false);
+  const [showOrderDatePicker, setShowOrderDatePicker] = useState(false);
+  const [currentProduct, setCurrentProduct] = useState<ProductItem>({
+    id: "",
+    quantity: 1,
+    unitPrice: 0,
+    discountRate: 0,
+    taxRate: 0,
+    totalPrice: 0,
+    finalPrice: 0,
+    purchaseValue: 0,
+  });
 
   useEffect(() => {
     if (visible && orderId) {
@@ -57,12 +128,17 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
   const loadOptions = async () => {
     setLoadingOptions(true);
     try {
-      const [suppliersData, warehousesData] = await Promise.all([
+      const [suppliersData, warehousesData, contractsData, productsData] = await Promise.all([
         purchaseOrderService.getSuppliers(),
         purchaseOrderService.getWarehouses(),
+        purchaseOrderService.getContracts(),
+        productService.getProductVariants(),
       ]);
       setSuppliers(suppliersData);
       setWarehouses(warehousesData);
+      setContracts(contractsData);
+      setAllProducts(productsData);
+      setProductOptions(productsData);
     } catch (error) {
       Alert.alert('Lỗi', 'Không thể tải dữ liệu');
     } finally {
@@ -75,6 +151,15 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
     try {
       const data = await purchaseOrderService.getPurchaseOrderById(id);
       setForm(data);
+      
+      // Load contract detail if order has contract
+      if (data?.contract?.id || data?.contract) {
+        const contractId = typeof data.contract === 'string' ? data.contract : data.contract.id;
+        await loadContractDetail(contractId);
+      } else {
+        setContractDetail(null);
+        setProductOptions(allProducts);
+      }
     } catch (err: any) {
       Alert.alert('Lỗi', err && err.message ? err.message : 'Không thể tải đơn hàng');
       onClose();
@@ -83,8 +168,62 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
     }
   };
 
+  const loadContractDetail = async (contractId: string) => {
+    if (!contractId) {
+      setContractDetail(null);
+      setProductOptions(allProducts);
+      return;
+    }
+    
+    setLoadingContract(true);
+    try {
+      const data = await contractService.getContractById(contractId);
+      console.log('Contract Detail:', data);
+      
+      if (data) {
+        setContractDetail(data);
+        
+        // Filter products theo contract items - API trả về variant thay vì product
+        if (data.items && data.items.length > 0) {
+          // Lấy danh sách variant từ contract items
+          const contractProducts = data.items.map((item: any) => ({
+            ...item.variant,
+            // Thêm thông tin từ contract item để dùng sau
+            contractQuantity: item.quantity,
+            contractUnitPrice: item.unitPrice,
+            contractTaxRate: item.taxRate,
+            contractTaxAmount: item.taxAmount,
+            contractDiscountRate: item.discountRate,
+            contractDiscountAmount: item.discountAmount,
+            contractNote: item.note
+          }));
+          setProductOptions(contractProducts);
+        } else {
+          setProductOptions(allProducts);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error loading contract detail:', error);
+      Alert.alert('Lỗi', 'Không thể tải thông tin hợp đồng');
+      setContractDetail(null);
+      setProductOptions(allProducts);
+    } finally {
+      setLoadingContract(false);
+    }
+  };
+
   const handleChange = (key: string, value: any) => {
     setForm((prev: any) => ({ ...prev, [key]: value }));
+    
+    // Handle contract change
+    if (key === 'contract') {
+      loadContractDetail(value);
+      
+      // Reset supplier if contract changes
+      if (value && contractDetail && contractDetail.supplier?.id) {
+        setForm((prev: any) => ({ ...prev, supplier: contractDetail.supplier.id }));
+      }
+    }
   };
 
   const handleRemoveProduct = (index: number) => {
@@ -97,6 +236,123 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
     const documents = [...(form.documents || [])];
     documents.splice(index, 1);
     setForm((prev: any) => ({ ...prev, documents }));
+  };
+
+  const calculateProductPrices = (product: ProductItem): ProductItem => {
+    const totalPrice = product.quantity * product.unitPrice;
+    
+    // Calculate discount and tax amounts based on rates
+    const discountAmount = product.discountAmount !== undefined 
+      ? product.discountAmount 
+      : totalPrice * (product.discountRate || 0) / 100;
+    
+    const priceAfterDiscount = totalPrice - discountAmount;
+    
+    const taxAmount = product.taxAmount !== undefined
+      ? product.taxAmount
+      : priceAfterDiscount * (product.taxRate || 0) / 100;
+    
+    const finalPrice = priceAfterDiscount + taxAmount;
+
+    return {
+      ...product,
+      totalPrice,
+      finalPrice,
+      purchaseValue: finalPrice,
+      discountAmount,
+      taxAmount,
+      // Keep rates for API
+      discountRate: product.discountRate || (product.discountAmount ? (discountAmount / totalPrice * 100) : 0),
+      taxRate: product.taxRate || (product.taxAmount ? (taxAmount / priceAfterDiscount * 100) : 0),
+    };
+  };
+
+  const handleProductSelect = (productId: string) => {
+    const selectedProduct = productOptions.find((p) => p.id === productId);
+    if (selectedProduct) {
+      // Get product name - handle different data structures
+      const productName = selectedProduct.name || selectedProduct.productName || selectedProduct.product?.name || '';
+      
+      // Nếu có contract detail, lấy thông tin từ product option đã được enhance với contract info
+      if (contractDetail && selectedProduct.contractQuantity !== undefined) {
+        // Thông tin đã được lưu trong productOptions khi load contract
+        setCurrentProduct({
+          ...currentProduct,
+          id: productId,
+          name: productName,
+          quantity: selectedProduct.contractQuantity,
+          unitPrice: selectedProduct.contractUnitPrice,
+          discountAmount: selectedProduct.contractDiscountAmount || 0,
+          taxAmount: selectedProduct.contractTaxAmount || 0,
+          discountRate: selectedProduct.contractDiscountRate || 0,
+          taxRate: selectedProduct.contractTaxRate || 0,
+          note: selectedProduct.contractNote || '',
+        });
+      } else {
+        // Không có contract hoặc sản phẩm không thuộc contract
+        setCurrentProduct({
+          ...currentProduct,
+          id: productId,
+          name: productName,
+          unitPrice: selectedProduct.standardCost || selectedProduct.lastPurchaseCost || selectedProduct.costPrice || selectedProduct.price || selectedProduct.unitPrice || 0,
+          discountAmount: undefined,
+          taxAmount: undefined,
+        });
+      }
+    }
+  };
+
+  const handleAddProduct = () => {
+    if (!currentProduct.id) {
+      Alert.alert("Thông báo", "Vui lòng chọn sản phẩm");
+      return;
+    }
+
+    // Validation số lượng
+    if (currentProduct.quantity <= 0) {
+      Alert.alert("Thông báo", "Số lượng phải lớn hơn 0");
+      return;
+    }
+
+    // Nếu có contract, kiểm tra số lượng không vượt quá
+    if (contractDetail) {
+      const contractItem = contractDetail.items?.find(
+        (item: any) => item.variant.id === currentProduct.id
+      );
+      if (contractItem && currentProduct.quantity > contractItem.quantity) {
+        Alert.alert(
+          "Thông báo",
+          `Số lượng không được vượt quá ${contractItem.quantity} (theo hợp đồng)`
+        );
+        return;
+      }
+    }
+
+    const calculatedProduct = calculateProductPrices(currentProduct);
+    const products = [...(form.products || []), calculatedProduct];
+    setForm((prev: any) => ({ ...prev, products }));
+    
+    setCurrentProduct({
+      id: "",
+      quantity: 1,
+      unitPrice: 0,
+      discountRate: 0,
+      taxRate: 0,
+      totalPrice: 0,
+      finalPrice: 0,
+      purchaseValue: 0,
+    });
+    setShowProductForm(false);
+  };
+
+  const calculateOrderTotals = () => {
+    const products = form?.products || [];
+    const subTotal = products.reduce((sum: number, p: any) => sum + (p.totalPrice || p.quantity * p.unitPrice), 0);
+    const discountAmount = products.reduce((sum: number, p: any) => sum + (p.discountAmount || 0), 0);
+    const taxAmount = products.reduce((sum: number, p: any) => sum + (p.taxAmount || 0), 0);
+    const totalAmount = products.reduce((sum: number, p: any) => sum + (p.finalPrice || p.totalPrice || p.quantity * p.unitPrice), 0);
+
+    return { subTotal, taxAmount, totalAmount, discountAmount };
   };
 
   const handleUploadDocument = async () => {
@@ -138,39 +394,52 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
       return;
     }
 
+    const { subTotal, taxAmount, totalAmount, discountAmount } = calculateOrderTotals();
+
     setSaving(true);
     try {
-      const payload: any = {
-        id: form.id,
+      const payload: CreatePurchaseOrderData = {
         supplier: form.supplier?.id || form.supplier,
         warehouse: form.warehouse?.id || form.warehouse,
-        contract: form.contract?.id || form.contract || '',
+        ...(form.contract && { contract: form.contract?.id || form.contract }),
         products: (form.products || []).map((p: any) => ({
-          id: p.id,
+          variantId: p.variant?.id || p.id,
           quantity: p.quantity,
-          note: p.note,
-          expiredDate: p.expiredDate,
-          taxPercent: p.taxPercent,
-          discountPercent: p.discountPercent,
           unitPrice: p.unitPrice,
-          totalPrice: p.totalPrice,
-          finalPrice: p.finalPrice,
-          purchaseValue: p.purchaseValue,
+          taxRate: p.taxRate || 0,
+          taxAmount: p.taxAmount || 0,
+          discountRate: p.discountRate || 0,
+          discountAmount: p.discountAmount || 0,
+          subTotal: p.quantity * p.unitPrice,
+          totalPrice: p.finalPrice || p.totalPrice || (p.quantity * p.unitPrice),
+          ...(p.note && { note: p.note }),
         })),
-        documents: (form.documents || []).map((d: any) => d.id || d),
-        orderNumber: form.orderNumber,
-        description: form.description,
-        note: form.note,
+        ...(form.documents && form.documents.length > 0 && { documents: form.documents.map((d: any) => d.id || d) }),
         orderDate: form.orderDate,
-        subTotal: form.subTotal || 0,
-        taxAmount: form.taxAmount || 0,
-        totalAmount: form.totalAmount || 0,
+        description: form.description || '',
+        note: form.note || '',
+        subTotal,
+        taxAmount,
+        discountAmount,
+        totalAmount,
       };
 
-      await purchaseOrderService.updatePurchaseOrder(payload);
-      Alert.alert('Thành công', 'Đã cập nhật đơn nhập hàng');
-      onUpdated && onUpdated();
-      onClose();
+      // Update with ID for update operation
+      const updatePayload = {
+        ...payload,
+        id: form.id
+      };
+
+      await purchaseOrderService.updatePurchaseOrder(updatePayload);
+      
+      setShowSuccessDialog(true);
+      
+      // Auto close success dialog after 2 seconds
+      setTimeout(() => {
+        setShowSuccessDialog(false);
+        onUpdated && onUpdated();
+        onClose();
+      }, 2000);
     } catch (err: any) {
       Alert.alert('Lỗi', err && err.message ? err.message : 'Cập nhật thất bại');
     } finally {
@@ -228,12 +497,15 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Nhà cung cấp</Text>
-                <View style={styles.pickerContainer}>
+                <Text style={styles.label}>
+                  Nhà cung cấp <Text style={styles.required}>*</Text>
+                </Text>
+                <View style={[styles.pickerContainer, contractDetail && styles.pickerDisabled]}>
                   <Picker
                     selectedValue={form.supplier?.id || form.supplier || ''}
                     onValueChange={(value) => handleChange('supplier', value)}
                     style={styles.picker}
+                    enabled={!contractDetail}
                   >
                     <Picker.Item label="-- Chọn nhà cung cấp --" value="" />
                     {suppliers.map((s) => (
@@ -241,10 +513,17 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
                     ))}
                   </Picker>
                 </View>
+                {contractDetail && (
+                  <Text style={styles.helperText}>
+                    Nhà cung cấp sẽ được tự động chọn từ hợp đồng
+                  </Text>
+                )}
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Kho hàng</Text>
+                <Text style={styles.label}>
+                  Kho hàng <Text style={styles.required}>*</Text>
+                </Text>
                 <View style={styles.pickerContainer}>
                   <Picker
                     selectedValue={form.warehouse?.id || form.warehouse || ''}
@@ -257,6 +536,66 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
                     ))}
                   </Picker>
                 </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Hợp đồng (không bắt buộc)</Text>
+                <View style={[styles.pickerContainer, loadingContract && styles.pickerDisabled]}>
+                  <Picker
+                    selectedValue={form.contract?.id || form.contract || ''}
+                    onValueChange={(value) => handleChange('contract', value)}
+                    style={styles.picker}
+                    enabled={!loadingContract}
+                  >
+                    <Picker.Item label="-- Chọn hợp đồng --" value="" />
+                    {contracts.map((c) => (
+                      <Picker.Item key={c.id} label={`${c.contractNumber} - ${c.supplier?.name || 'N/A'}`} value={c.id} />
+                    ))}
+                  </Picker>
+                </View>
+                {loadingContract && (
+                  <Text style={styles.helperText}>Đang tải chi tiết hợp đồng...</Text>
+                )}
+                {contractDetail && (
+                  <Text style={styles.helperText}>
+                    Nhà cung cấp: {contractDetail.supplier?.name || 'N/A'}
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>
+                  Ngày đặt hàng <Text style={styles.required}>*</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.input}
+                  onPress={() => setShowOrderDatePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={{
+                      color: COLORS.gray800,
+                      fontSize: 14,
+                    }}
+                  >
+                    {form.orderDate ? new Date(form.orderDate).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN')}
+                  </Text>
+                </TouchableOpacity>
+                
+                {showOrderDatePicker && (
+                  <DateTimePicker
+                    value={form.orderDate ? new Date(form.orderDate) : new Date()}
+                    mode="date"
+                    display="default"
+                    onChange={(event, selectedDate) => {
+                      setShowOrderDatePicker(false);
+                      if (event.type === "dismissed") return;
+                      if (!selectedDate) return;
+                      handleChange('orderDate', selectedDate.toISOString());
+                    }}
+                  />
+                )}
+                <Text style={styles.helperText}>Ngày tạo đơn nhập hàng</Text>
               </View>
 
               <View style={styles.inputGroup}>
@@ -290,12 +629,31 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Sản phẩm</Text>
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => setShowProductForm(true)}
+                >
+                  <MaterialCommunityIcons
+                    name="plus"
+                    size={20}
+                    color={COLORS.white}
+                  />
+                  <Text style={styles.addButtonText}>Thêm</Text>
+                </TouchableOpacity>
               </View>
 
               {(form.products || []).map((product: any, index: number) => (
                 <View key={index} style={styles.productCard}>
                   <View style={styles.productHeader}>
-                    <Text style={styles.productName}>{product.name || product.id}</Text>
+                    <Text style={styles.productName}>
+                      {product.name || 
+                       product.variant?.name || 
+                       product.variant?.productName || 
+                       product.variant?.product?.name ||
+                       product.productName ||
+                       product.product?.name ||
+                       product.id}
+                    </Text>
                     <TouchableOpacity onPress={() => handleRemoveProduct(index)}>
                       <MaterialCommunityIcons name="delete" size={20} color={COLORS.error} />
                     </TouchableOpacity>
@@ -303,18 +661,27 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
                   <View style={styles.productDetails}>
                     <Text style={styles.productDetail}>SL: {product.quantity}</Text>
                     <Text style={styles.productDetail}>
-                      Đơn giá: {formatCurrency(product.unitPrice)}đ
+                      Đơn giá: {formatCurrency(product.unitPrice)}
                     </Text>
                     <Text style={styles.productDetail}>
-                      Giảm: {product.discountPercent ? (product.discountPercent * 100) + '%' : '-'}
+                      Giảm: {product.discountRate ? (product.discountRate).toFixed(1) + '%' : 
+                             product.discountPercent ? (product.discountPercent * 100).toFixed(1) + '%' : 
+                             product.discountAmount ? formatCurrency(product.discountAmount) + 'đ' : '-'}
                     </Text>
                     <Text style={styles.productDetail}>
-                      Thuế: {product.taxPercent ? (product.taxPercent * 100) + '%' : '-'}
+                      Thuế: {product.taxRate ? (product.taxRate).toFixed(1) + '%' : 
+                             product.taxPercent ? (product.taxPercent * 100).toFixed(1) + '%' : 
+                             product.taxAmount ? formatCurrency(product.taxAmount) + 'đ' : '-'}
                     </Text>
                   </View>
                   <View style={styles.productFooter}>
                     <Text style={styles.productTotal}>
-                      Thành tiền: {formatCurrency(product.finalPrice)} đ
+                      Thành tiền: {formatCurrency(
+                        product.finalPrice || 
+                        product.totalPrice || 
+                        product.purchaseValue || 
+                        (product.quantity * product.unitPrice)
+                      )} 
                     </Text>
                   </View>
                   {product.note && (
@@ -371,24 +738,39 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
             {form.products && form.products.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Tổng kết</Text>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Tạm tính:</Text>
-                  <Text style={styles.summaryValue}>
-                    {formatCurrency(form.subTotal || 0)} đ
-                  </Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Thuế:</Text>
-                  <Text style={styles.summaryValue}>
-                    {formatCurrency(form.taxAmount || 0)} đ
-                  </Text>
-                </View>
-                <View style={[styles.summaryRow, styles.totalRow]}>
-                  <Text style={styles.totalLabel}>Tổng cộng:</Text>
-                  <Text style={styles.totalValue}>
-                    {formatCurrency(form.totalAmount || 0)} đ
-                  </Text>
-                </View>
+                {(() => {
+                  const { subTotal, taxAmount, totalAmount, discountAmount } = calculateOrderTotals();
+                  return (
+                    <>
+                      <View style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>Tạm tính:</Text>
+                        <Text style={styles.summaryValue}>
+                          {formatCurrency(subTotal)} 
+                        </Text>
+                      </View>
+                      {discountAmount > 0 && (
+                        <View style={styles.summaryRow}>
+                          <Text style={styles.summaryLabel}>Giảm giá:</Text>
+                          <Text style={[styles.summaryValue, { color: COLORS.warning }]}>
+                            -{formatCurrency(discountAmount)} 
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>Thuế:</Text>
+                        <Text style={styles.summaryValue}>
+                          {formatCurrency(taxAmount)} 
+                        </Text>
+                      </View>
+                      <View style={[styles.summaryRow, styles.totalRow]}>
+                        <Text style={styles.totalLabel}>Tổng cộng:</Text>
+                        <Text style={styles.totalValue}>
+                          {formatCurrency(totalAmount)} 
+                        </Text>
+                      </View>
+                    </>
+                  );
+                })()}
               </View>
             )}
           </ScrollView>
@@ -397,6 +779,193 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
             <MaterialCommunityIcons name="database-off-outline" size={48} color={COLORS.gray400} />
             <Text style={styles.emptyText}>Không có dữ liệu</Text>
           </View>
+        )}
+
+        {/* Product Form Modal */}
+        {showProductForm && (
+          <Modal visible={showProductForm} transparent animationType="fade">
+            <View style={styles.productFormOverlay}>
+              <View style={styles.productForm}>
+                <View style={styles.productFormHeader}>
+                  <Text style={styles.productFormTitle}>Thêm sản phẩm</Text>
+                  <TouchableOpacity onPress={() => setShowProductForm(false)}>
+                    <MaterialCommunityIcons
+                      name="close"
+                      size={24}
+                      color={COLORS.gray800}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>
+                      Sản phẩm <Text style={styles.required}>*</Text>
+                    </Text>
+                    <View style={styles.pickerContainer}>
+                      <Picker
+                        selectedValue={currentProduct.id}
+                        onValueChange={handleProductSelect}
+                        style={styles.picker}
+                      >
+                        <Picker.Item label="-- Chọn sản phẩm --" value="" />
+                        {productOptions.map((p) => {
+                          const displayName = p.name || p.productName || p.product?.name || 'Sản phẩm ' + p.id;
+                          const displaySku = p.sku || p.code || p.productCode || '';
+                          return (
+                            <Picker.Item
+                              key={p.id}
+                              label={displaySku ? `${displayName} (${displaySku})` : displayName}
+                              value={p.id}
+                            />
+                          );
+                        })}
+                      </Picker>
+                    </View>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>
+                      Số lượng <Text style={styles.required}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={currentProduct.quantity.toString()}
+                      onChangeText={(text) =>
+                        setCurrentProduct({
+                          ...currentProduct,
+                          quantity: parseInt(text) || 0,
+                        })
+                      }
+                      placeholder="Số lượng"
+                      keyboardType="numeric"
+                      placeholderTextColor={COLORS.gray400}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>
+                      Đơn giá <Text style={styles.required}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={currentProduct.unitPrice.toString()}
+                      onChangeText={(text) =>
+                        setCurrentProduct({
+                          ...currentProduct,
+                          unitPrice: parseFloat(text) || 0,
+                        })
+                      }
+                      placeholder="Đơn giá"
+                      keyboardType="numeric"
+                      placeholderTextColor={COLORS.gray400}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Ngày hết hạn</Text>
+                    <TouchableOpacity
+                      style={styles.input}
+                      onPress={() => setShowExpiredDatePicker(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={{
+                          color: currentProduct.expiredDate
+                            ? COLORS.gray800
+                            : COLORS.gray400,
+                          fontSize: 14,
+                        }}
+                      >
+                        {currentProduct.expiredDate
+                          ? currentProduct.expiredDate.slice(0, 10)
+                          : "Chọn ngày (YYYY-MM-DD)"}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {showExpiredDatePicker && (
+                      <DateTimePicker
+                        value={
+                          currentProduct.expiredDate
+                            ? new Date(currentProduct.expiredDate)
+                            : new Date()
+                        }
+                        mode="date"
+                        display="default"
+                        onChange={(event, selectedDate) => {
+                          setShowExpiredDatePicker(false);
+                          if (event.type === "dismissed") return;
+                          if (!selectedDate) return;
+                          setCurrentProduct({
+                            ...currentProduct,
+                            expiredDate: selectedDate.toISOString(),
+                          });
+                        }}
+                      />
+                    )}
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Giảm giá (%)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={(currentProduct.discountRate * 100).toString()}
+                      onChangeText={(text) =>
+                        setCurrentProduct({
+                          ...currentProduct,
+                          discountRate: (parseFloat(text) || 0) / 100,
+                        })
+                      }
+                      placeholder="Phần trăm giảm giá"
+                      keyboardType="numeric"
+                      placeholderTextColor={COLORS.gray400}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Thuế (%)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={(currentProduct.taxRate * 100).toString()}
+                      onChangeText={(text) =>
+                        setCurrentProduct({
+                          ...currentProduct,
+                          taxRate: (parseFloat(text) || 0) / 100,
+                        })
+                      }
+                      placeholder="Phần trăm thuế"
+                      keyboardType="numeric"
+                      placeholderTextColor={COLORS.gray400}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Ghi chú</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={currentProduct.note || ''}
+                      onChangeText={(text) =>
+                        setCurrentProduct({ ...currentProduct, note: text })
+                      }
+                      placeholder="Ghi chú sản phẩm"
+                      placeholderTextColor={COLORS.gray400}
+                      multiline
+                      numberOfLines={2}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.addProductButton}
+                    onPress={handleAddProduct}
+                  >
+                    <Text style={styles.addProductButtonText}>
+                      Thêm sản phẩm
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
         )}
 
         {/* Footer */}
@@ -423,6 +992,29 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
           </View>
         )}
       </View>
+
+      {/* Success Dialog */}
+      <DialogNotification
+        visible={showSuccessDialog}
+        type="success"
+        title="Cập nhật thành công!"
+        message="Đơn nhập hàng đã được cập nhật thành công"
+        actions={[
+          {
+            text: "OK",
+            onPress: () => {
+              setShowSuccessDialog(false);
+              onUpdated && onUpdated();
+              onClose();
+            }
+          }
+        ]}
+        onDismiss={() => {
+          setShowSuccessDialog(false);
+          onUpdated && onUpdated();
+          onClose();
+        }}
+      />
     </Modal>
   );
 }
@@ -749,5 +1341,70 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.5,
+  },
+
+  // Product Form Modal
+  productFormOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  productForm: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    width: "100%",
+    maxHeight: "85%",
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  productFormHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+  },
+  productFormTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.gray800,
+  },
+  addProductButton: {
+    backgroundColor: COLORS.success,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 12,
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addProductButtonText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  required: {
+    color: COLORS.error,
+  },
+  pickerDisabled: {
+    backgroundColor: COLORS.gray100,
+    opacity: 0.7,
+  },
+  helperText: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginTop: 4,
+    fontStyle: "italic",
   },
 });

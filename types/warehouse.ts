@@ -1,4 +1,4 @@
-/**
+  /**
  * Warehouse Types
  */
 
@@ -24,11 +24,138 @@ export interface WarehouseProduct {
   location: string;
   stack: number;
   expiredDate: string | null;
-  images: Array<{
+  images?: Array<{
     id: string;
     imageUrl: string;
     isPrimary: boolean;
   }>;
+}
+
+// New API structure for warehouse stock items
+export interface WarehouseStockItem {
+  warehouseStock: {
+    id: string;
+    createdAt: string | null;
+    updatedAt: string;
+    note: string;
+    quantityOnHand: number;
+    quantityAvailable: number;
+    quantityReserved: number;
+    location: string;
+    lastMovementDate: string;
+    warehouse: {
+      id: string;
+      createdAt: string;
+      updatedAt: string;
+      code: string | null;
+      description: string;
+      name: string;
+      address: string;
+      type: WarehouseType;
+    };
+  };
+  productBatch: {
+    id: string;
+    createdAt: string;
+    updatedAt: string;
+    batchCode: string;
+    manufactureDate: string;
+    expiryDate: string;
+    receivedDate: string;
+    quantityReceived: number;
+    quantityRemaining: number;
+    costPrice: number;
+    productVariant: {
+      id: string;
+      createdAt: string;
+      updatedAt: string;
+      sku: string;
+      name: string;
+      model: string;
+      partNumber: string;
+      attributes: Record<string, any>;
+      unit: string;
+      standardCost: number;
+      lastPurchaseCost: number;
+      active: boolean;
+      product: {
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        productCategory: {
+          id: string;
+          createdAt: string;
+          updatedAt: string;
+          name: string;
+          profitMargin: number;
+          description: string;
+        };
+        productGroup: {
+          id: string;
+          createdAt: string;
+          updatedAt: string;
+          name: string;
+          jobType: string;
+          description: string;
+          tncnntax: number;
+          gtgttax: number;
+        };
+        brand: {
+          id: string;
+          createdAt: string;
+          updatedAt: string;
+          name: string;
+          description: string;
+        };
+        tags: Array<{
+          id: string;
+          createdAt: string;
+          updatedAt: string;
+          name: string;
+        }>;
+        images: Array<{
+          id: string;
+          createdAt: string;
+          imageUrl: string;
+          isPrimary: boolean;
+        }>;
+        code: string;
+        name: string;
+        active: boolean;
+        description: string;
+        type: string;
+      };
+      documents: Array<{
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        fileName: string;
+        filePath: string;
+        uploadedAt: string;
+      }>;
+      supplier: {
+        id: string;
+        createdAt: string;
+        updatedAt: string;
+        code: string;
+        name: string;
+        address: string;
+        taxCode: string;
+        phoneNumber: string;
+        email: string;
+        bankName: string;
+        bankAccount: string;
+        bankBranch: string;
+        paymentTermDays: number;
+        description: string;
+        active: boolean;
+        supplierType: string;
+        debtRecognitionMode: string;
+        debtDate: string | null;
+        maxDebt: number;
+      };
+    };
+  };
 }
 
 export interface ProductDetail {
