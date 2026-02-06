@@ -28,7 +28,7 @@ export interface ProductGroup {
   id: string;
   createdAt: string;
   updatedAt: string;
-  groupId: string;
+  groupId?: string;
   name: string;
   description: string;
   jobType: string;
@@ -42,30 +42,83 @@ export interface ProductCategory {
   updatedAt: string;
   name: string;
   description: string;
+  profitMargin?: number;
+}
+
+export interface ProductVariant {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  sku: string;
+  name: string;
+  model?: string;
+  partNumber?: string;
+  attributes?: Record<string, any>;
+  unit: string;
+  standardCost: number;
+  lastPurchaseCost?: number;
+  active: boolean;
+  product?: Product;
+  documents?: ProductDocument[];
+  supplier?: ProductSupplier;
+}
+
+export interface ProductDocument {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  fileName: string;
+  filePath: string;
+  uploadedAt: string;
+}
+
+export interface ProductSupplier {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  code: string;
+  name: string;
+  address?: string;
+  taxCode?: string;
+  phoneNumber?: string;
+  email?: string;
+  bankName?: string;
+  bankAccount?: string;
+  bankBranch?: string;
+  paymentTermDays?: number;
+  description?: string;
+  active: boolean;
+  supplierType: string;
+  debtRecognitionMode?: string;
+  debtDate?: string | null;
+  maxDebt?: number;
 }
 
 export interface Product {
   id: string;
   createdAt: string;
   updatedAt: string;
-  productCategory: ProductCategory;
-  productGroup: ProductGroup;
-  brand: ProductBrand;
+  productCategory?: ProductCategory | null;
+  productGroup?: ProductGroup | null;
+  brand?: ProductBrand | null;
   tags: ProductTag[];
   images: ProductImage[];
-  sku: string;
-  productCode: string;
+  variants?: ProductVariant[];
+  code: string;
   name: string;
   description: string;
-  type: string;
-  unit: string;
-  model: string;
-  partNumber: string;
-  serialNumber: string;
-  costPrice: number;
-  sellPrice: number;
-  minStock: number;
+  type: 'PHYSICAL' | 'DIGITAL' | 'SERVICE';
   active: boolean;
+  // Legacy fields for backward compatibility
+  sku?: string;
+  productCode?: string;
+  unit?: string;
+  model?: string;
+  partNumber?: string;
+  serialNumber?: string;
+  costPrice?: number;
+  sellPrice?: number;
+  minStock?: number;
 }
 
 export interface ProductDisplayItem {
@@ -83,4 +136,53 @@ export interface GetProductsResponse {
   code: string;
   message: string;
   data: Product[];
+}
+
+export interface CreateProductRequest {
+  productCategoryId?: string;
+  productGroupId?: string;
+  brandId?: string;
+  tags: string[];
+  images: string[];
+  name: string;
+  description: string;
+  type: 'PHYSICAL' | 'DIGITAL' | 'SERVICE';
+  variants?: CreateProductVariantRequest[];
+}
+
+export interface UpdateProductRequest extends CreateProductRequest {
+  id: string;
+}
+
+export interface CreateProductVariantRequest {
+  sku: string;
+  name: string;
+  model?: string;
+  partNumber?: string;
+  attributes?: Record<string, any>;
+  unit: string;
+  standardCost: number;
+  documentIds?: string[];
+}
+
+export interface CreateProductVariantStandaloneRequest extends CreateProductVariantRequest {
+  productId: string;
+}
+
+export interface UpdateProductVariantRequest extends CreateProductVariantRequest {
+  id: string;
+}
+
+export interface GetProductVariantsResponse {
+  success: boolean;
+  code: string;
+  message: string;
+  data: ProductVariant[];
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  code: string;
+  message: string;
+  data: T;
 }

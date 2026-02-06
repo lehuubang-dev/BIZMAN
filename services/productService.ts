@@ -77,9 +77,9 @@ class ProductService {
       id: product.id,
       image: product.images.find(img => img.isPrimary)?.imageUrl || null,
       name: product.name,
-      unit: product.unit,
+      unit: product.unit || 'cái',
       type: product.type,
-      sellPrice: product.sellPrice,
+      sellPrice: product.sellPrice || 0,
       active: product.active,
     }));
   }
@@ -161,9 +161,9 @@ class ProductService {
       id: product.id,
       image: product.images.find(img => img.isPrimary)?.imageUrl || null,
       name: product.name,
-      unit: product.unit,
+      unit: product.unit || 'cái',
       type: product.type,
-      sellPrice: product.sellPrice,
+      sellPrice: product.sellPrice || 0,
       active: product.active,
     };
   }
@@ -361,6 +361,209 @@ class ProductService {
       return response;
     } catch (error) {
       console.error('Error updating product:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get products by tags
+   */
+  async getProductsByTags(tagNames: string[]): Promise<Product[]> {
+    try {
+      const tagQuery = tagNames.join(',');
+      const response = await apiClient.get<any>(
+        `/api/v1/products/get-product-by-tags?tagNames=${encodeURIComponent(tagQuery)}`
+      );
+      
+      console.log('Get products by tags API Response:', response);
+      
+      // Handle new API response format: { success, code, message, data: Product[] }
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      
+      // Handle paginated response: { data: { content: [...] } }
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        return response.data.content;
+      }
+      
+      // Handle direct array response: [...]
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      console.warn('Unexpected response format for getProductsByTags:', response);
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching products by tags:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all product variants
+   */
+  async getProductVariants(): Promise<any[]> {
+    try {
+      console.log('📦 Fetching all product variants...');
+      const response = await apiClient.get<any>('/api/v1/products/get-product-variants');
+      console.log('📦 Product variants API response:', response);
+      
+      // Handle paginated API response format: { success, code, message, data: { content: [...], totalElements: ... } }
+      if (response?.success && response?.data?.content && Array.isArray(response.data.content)) {
+        console.log('✅ Found variants in paginated response:', response.data.content.length, 'items');
+        console.log('📋 Total elements:', response.data.totalElements);
+        return response.data.content;
+      }
+      
+      // Handle API response format: { success, code, message, data: [...] }
+      if (response?.success && response?.data && Array.isArray(response.data)) {
+        console.log('✅ Found variants in response.data:', response.data.length);
+        return response.data;
+      }
+      
+      // Fallback: direct array in data
+      if (response?.data && Array.isArray(response.data)) {
+        console.log('✅ Found variants in response.data (fallback):', response.data.length);
+        return response.data;
+      }
+      
+      // Fallback: paginated format without success flag
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        console.log('✅ Found variants in paginated response (no success flag):', response.data.content.length);
+        return response.data.content;
+      }
+      
+      // Fallback: direct array response
+      if (Array.isArray(response)) {
+        console.log('✅ Found variants in direct response:', response.length);
+        return response;
+      }
+      
+      console.warn('⚠️ Unexpected variants response format:', response);
+      return [];
+    } catch (error: any) {
+      console.error('❌ Error fetching product variants:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get product variants by supplier ID
+   */
+  async getProductVariantsBySupplierId(supplierId: string): Promise<any[]> {
+    try {
+      const response = await apiClient.get<any>(
+        `/api/v1/products/get-product-variant-by-supplier-id?supplierId=${supplierId}`
+      );
+      
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        return response.data.content;
+      }
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching product variants by supplier:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get product variant by ID
+   */
+  async getProductVariantById(variantId: string): Promise<any | null> {
+    try {
+      console.log('🔍 Fetching product variant by ID:', variantId);
+      const response = await apiClient.get<any>(
+        `/api/v1/products/get-product-variant-by-id?productVariantId=${variantId}`
+      );
+      console.log('📦 Product variant by ID API response:', response);
+      
+      // Handle API response format: { success, code, message, data: {...} }
+      if (response?.success && response?.data) {
+        console.log('✅ Found variant in response.data');
+        return response.data;
+      }
+      
+      // Fallback: direct data
+      if (response?.data) {
+        console.log('✅ Found variant in response.data (fallback)');
+        return response.data;
+      }
+      
+      // Fallback: direct response
+      if (response && typeof response === 'object') {
+        console.log('✅ Found variant in direct response');
+        return response;
+      }
+      
+      console.warn('⚠️ No variant found in response:', response);
+      return null;
+    } catch (error: any) {
+      console.error('❌ Error fetching product variant by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search product variants by keyword
+   */
+  async searchProductVariants(keyword: string): Promise<any[]> {
+    try {
+      if (!keyword || !keyword.trim()) {
+        return this.getProductVariants();
+      }
+      
+      console.log('🔍 Searching product variants with keyword:', keyword);
+      
+      // Get all variants first, then filter by keyword
+      const allVariants = await this.getProductVariants();
+      console.log('📦 Retrieved variants for search:', allVariants.length);
+      
+      const filteredVariants = allVariants.filter((variant: any) => {
+        const searchStr = keyword.toLowerCase().trim();
+        const searchFields = [
+          variant?.name?.toLowerCase() || '',
+          variant?.sku?.toLowerCase() || '',
+          variant?.model?.toLowerCase() || '',
+          variant?.partNumber?.toLowerCase() || '',
+          variant?.product?.name?.toLowerCase() || '',
+          variant?.product?.code?.toLowerCase() || ''
+        ];
+        
+        return searchFields.some(field => field.includes(searchStr));
+      });
+      
+      console.log('🎯 Filtered variants:', filteredVariants.length);
+      return filteredVariants;
+    } catch (error: any) {
+      console.error('❌ Error searching product variants:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new product variant
+   */
+  async createProductVariant(data: any): Promise<any> {
+    try {
+      return await apiClient.post('/api/v1/products/create-product-variant', data);
+    } catch (error) {
+      console.error('Error creating product variant:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing product variant
+   */
+  async updateProductVariant(data: any): Promise<any> {
+    try {
+      return await apiClient.post('/api/v1/products/update-product-variant', data);
+    } catch (error) {
+      console.error('Error updating product variant:', error);
       throw error;
     }
   }

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,22 +7,93 @@ import {
   ScrollView,
   Image,
   SafeAreaView,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { authService } from '../../../services/authService';
 
 interface ProfileUser {
-  name?: string;
+  id?: string;
   email?: string;
+  role?: string;
+  name?: string;
   phone?: string;
   avatar?: string;
 }
 
+interface BusinessProfile {
+  id?: string;
+  businessName?: string;
+  taxCode?: string;
+  businessType?: string;
+  revenueClass?: string;
+  plan?: string;
+}
+
 interface ProfileScreenProps {
-  user: ProfileUser | null;
   onBack: () => void;
 }
 
-export default function ProfileScreen({ user, onBack }: ProfileScreenProps) {
+export default function ProfileScreen({ onBack }: ProfileScreenProps) {
+  const [user, setUser] = useState<ProfileUser | null>(null);
+  const [business, setBusiness] = useState<BusinessProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadProfileData();
+  }, []);
+
+  const loadProfileData = async () => {
+    setLoading(true);
+    try {
+      const [userProfile, businessProfile] = await Promise.all([
+        authService.getUserProfile(),
+        authService.getBusinessProfile()
+      ]);
+      
+      setUser({
+        id: userProfile.id,
+        email: userProfile.email,
+        role: userProfile.role,
+        name: businessProfile?.businessName || userProfile.email?.split('@')[0],
+        phone: userProfile.phone,
+        avatar: userProfile.avatar
+      });
+      
+      setBusiness({
+        id: businessProfile.id,
+        businessName: businessProfile.businessName,
+        taxCode: businessProfile.taxCode,
+        businessType: businessProfile.businessType,
+        revenueClass: businessProfile.revenueClass,
+        plan: businessProfile.plan
+      });
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      Alert.alert('Lỗi', 'Không thể tải thông tin hồ sơ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getRoleLabel = (role?: string) => {
+    switch (role) {
+      case 'ADMIN': return 'Quản trị viên';
+      case 'USER': return 'Người dùng';
+      case 'MANAGER': return 'Quản lý';
+      default: return role || 'Chưa xác định';
+    }
+  };
+
+  const getRevenueClassLabel = (revenueClass?: string) => {
+    switch (revenueClass) {
+      case 'A': return 'Hạng A';
+      case 'B': return 'Hạng B';
+      case 'C': return 'Hạng C';
+      default: return revenueClass || 'Chưa phân loại';
+    }
+  };
   return (
     <SafeAreaView style={styles.container}>
       {/* Header Background */}
@@ -41,74 +112,151 @@ export default function ProfileScreen({ user, onBack }: ProfileScreenProps) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-      >
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={styles.avatarWrapper}>
-            {user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={45} color="#fff" />
-              </View>
-            )}
-            <TouchableOpacity style={styles.cameraButton}>
-              <Ionicons name="camera" size={16} color="#fff" />
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2196F3" />
+          <Text style={styles.loadingText}>Đang tải thông tin...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+        >
+          {/* Profile Card */}
+          <View style={styles.profileCard}>
+            <View style={styles.avatarWrapper}>
+              {user?.avatar ? (
+                <Image source={{ uri: user.avatar }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Ionicons name="person" size={45} color="#fff" />
+                </View>
+              )}
+              <TouchableOpacity style={styles.cameraButton}>
+                <Ionicons name="camera" size={16} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.name} numberOfLines={1}>
+              {business?.businessName || user?.name || "Chưa có tên"}
+            </Text>
+            <Text style={styles.email} numberOfLines={1}>
+              {user?.email || "Chưa có email"}
+            </Text>
+            
+            {/* Role Badge */}
+            <View style={styles.roleBadge}>
+              <Ionicons name="shield-checkmark" size={14} color="#2196F3" />
+              <Text style={styles.roleText}>{getRoleLabel(user?.role)}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.editProfileButton}>
+              <Ionicons name="create-outline" size={18} color="#2196F3" />
+              <Text style={styles.editProfileText}>Chỉnh sửa hồ sơ</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.name} numberOfLines={1}>
-            {user?.name || "Chưa có tên"}
-          </Text>
-          <Text style={styles.email} numberOfLines={1}>
-            {user?.email || "Chưa có email"}
-          </Text>
-
-          <TouchableOpacity style={styles.editProfileButton}>
-            <Ionicons name="create-outline" size={18} color="#2196F3" />
-            <Text style={styles.editProfileText}>Chỉnh sửa hồ sơ</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <View style={styles.infoIconBox}>
-              <Ionicons name="call-outline" size={22} color="#2196F3" />
+          {/* Business Info Card */}
+          <View style={styles.infoCard}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="business" size={20} color="#2196F3" />
+              <Text style={styles.cardTitle}>Thông tin doanh nghiệp</Text>
             </View>
-            <View style={styles.infoTextGroup}>
-              <Text style={styles.infoLabel}>Số điện thoại</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>
-                {user?.phone || "Chưa cập nhật"}
-              </Text>
+            
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconBox}>
+                <Ionicons name="business-outline" size={22} color="#2196F3" />
+              </View>
+              <View style={styles.infoTextGroup}>
+                <Text style={styles.infoLabel}>Tên doanh nghiệp</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {business?.businessName || "Chưa cập nhật"}
+                </Text>
+              </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#CCC" />
+
+            <View style={styles.divider} />
+
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconBox}>
+                <Ionicons name="document-text-outline" size={22} color="#FF9800" />
+              </View>
+              <View style={styles.infoTextGroup}>
+                <Text style={styles.infoLabel}>Mã số thuế</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {business?.taxCode || "Chưa cập nhật"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconBox}>
+                <Ionicons name="stats-chart-outline" size={22} color="#4CAF50" />
+              </View>
+              <View style={styles.infoTextGroup}>
+                <Text style={styles.infoLabel}>Hạng doanh thu</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {getRevenueClassLabel(business?.revenueClass)}
+                </Text>
+              </View>
+            </View>
           </View>
 
-          <View style={styles.divider} />
+          {/* Contact Info Card */}
+          <View style={styles.infoCard}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="call" size={20} color="#4CAF50" />
+              <Text style={styles.cardTitle}>Thông tin liên hệ</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconBox}>
+                <Ionicons name="call-outline" size={22} color="#4CAF50" />
+              </View>
+              <View style={styles.infoTextGroup}>
+                <Text style={styles.infoLabel}>Số điện thoại</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {user?.phone || "Chưa cập nhật"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#CCC" />
+            </View>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoIconBox}>
-              <Ionicons name="location-outline" size={22} color="#4CAF50" />
+            <View style={styles.divider} />
+
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconBox}>
+                <Ionicons name="mail-outline" size={22} color="#2196F3" />
+              </View>
+              <View style={styles.infoTextGroup}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {user?.email || "Chưa cập nhật"}
+                </Text>
+              </View>
             </View>
-            <View style={styles.infoTextGroup}>
-              <Text style={styles.infoLabel}>Địa chỉ giao/nhận</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>
-                Thêm địa chỉ để tối ưu giao nhận
-              </Text>
+
+            <View style={styles.divider} />
+
+            <View style={styles.infoRow}>
+              <View style={styles.infoIconBox}>
+                <Ionicons name="location-outline" size={22} color="#FF5722" />
+              </View>
+              <View style={styles.infoTextGroup}>
+                <Text style={styles.infoLabel}>Địa chỉ giao/nhận</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  Thêm địa chỉ để tối ưu giao nhận
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#CCC" />
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#CCC" />
           </View>
-        </View>
 
-        
-
-        <View style={styles.spacer} />
-      </ScrollView>
+          <View style={styles.spacer} />
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -384,5 +532,42 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 16,
+    gap: 4,
+  },
+  roleText: {
+    fontSize: 12,
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1B1E2A',
   },
 });

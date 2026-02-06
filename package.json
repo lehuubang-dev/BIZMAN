@@ -41,12 +41,14 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
+    "react-native-vector-icons": "^10.3.0",
     "react-native-web": "^0.21.0",
     "react-redux": "^9.1.2"
   },
   "devDependencies": {
     "@expo/metro-config": "^54.0.12",
     "@types/react": "~19.1.10",
+    "@types/react-native-vector-icons": "^6.4.18",
     "babel-plugin-module-resolver": "^5.0.2",
     "metro-react-native-babel-preset": "^0.77.0",
     "typescript": "~5.9.2"

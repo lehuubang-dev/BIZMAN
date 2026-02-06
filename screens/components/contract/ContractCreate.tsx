@@ -2,25 +2,25 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Modal,
-  StyleSheet,
-  ScrollView,
-  TextInput,
   TouchableOpacity,
+  StyleSheet,
   Alert,
-  ActivityIndicator,
+  Modal,
   KeyboardAvoidingView,
   Platform,
-  FlatList,
+  ScrollView,
+  ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import * as DocumentPicker from 'expo-document-picker';
-import { contractService } from '../../../services/contractService';
-import { purchaseOrderService } from '../../../services/purchaseOrderService';
-import { partnerService } from '../../../services/partnerService';
-import { productService } from '../../../services/productService';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { contractService, partnerService, productService } from '../../../services';
 import { ContractType, DebtRecognitionMode, TermStatus } from '../../../types/contract';
+import BasicInfoTab from './create/BasicInfoTab';
+import PaymentTermsTab from './create/PaymentTermsTab';
+import ProductsTab from './create/ProductsTab';
+import ContractTypeTab from './create/ContractTypeTab';
+import DocumentsTab from './create/DocumentsTab';
+import Snackbar from '../common/Snackbar';
 
 const COLORS = {
   primary: '#2196F3',
@@ -36,10 +36,10 @@ const COLORS = {
 };
 
 const TABS = [
-  { id: 'basic', title: 'Thông tin cơ bản', icon: 'information-circle-outline' },
-  { id: 'terms', title: 'Điều khoản TT', icon: 'card-outline' },
+  { id: 'basic', title: 'Thông tin cơ bản', icon: 'file-document-edit-outline' },
+  { id: 'terms', title: 'Điều khoản TT', icon: 'credit-card-outline' },
   { id: 'products', title: 'Sản phẩm', icon: 'cube-outline' },
-  { id: 'contract', title: 'Loại hợp đồng', icon: 'document-text-outline' },
+  { id: 'contract', title: 'Loại hợp đồng', icon: 'file-document-outline' },
   { id: 'documents', title: 'Tài liệu', icon: 'folder-outline' },
 ];
 
@@ -91,10 +91,7 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('basic');
-  const [showDatePicker, setShowDatePicker] = useState<{ field: string; show: boolean }>({ field: '', show: false });
-  const [showSupplierPicker, setShowSupplierPicker] = useState(false);
-  const [showProductPicker, setShowProductPicker] = useState(false);
-  const [selectedItemIndex, setSelectedItemIndex] = useState<number>(-1);
+  const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'warning' | 'info' }>({ visible: false, message: '', type: 'success' });
   
   const [form, setForm] = useState<ContractForm>({
     title: '',
@@ -115,6 +112,9 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
   });
 
   const handleClose = () => {
+    // Reset snackbar state
+    setSnackbar({ visible: false, message: '', type: 'success' });
+    
     // Reset form when closing
     setForm({
       title: '',
@@ -156,108 +156,94 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
     }
   };
 
-  const handleAddTerm = () => {
-    const newTerm: ContractTerm = {
-      title: '',
-      paymentDate: new Date(),
-      dueDate: new Date(),
-      amount: 0,
-      status: 'PENDING',
-      note: '',
-    };
-    setForm(prev => ({ ...prev, terms: [...prev.terms, newTerm] }));
-  };
-
-  const handleAddItem = () => {
-    const newItem: ContractItem = {
-      productId: '',
-      quantity: 1,
-      unitPrice: 0,
-      totalPrice: 0,
-      tax: 0,
-      discount: 0,
-      note: '',
-    };
-    setForm(prev => ({ ...prev, items: [...prev.items, newItem] }));
-  };
-
-  const handleRemoveTerm = (index: number) => {
-    setForm(prev => ({
-      ...prev,
-      terms: prev.terms.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleRemoveItem = (index: number) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleUpdateTerm = (index: number, field: keyof ContractTerm, value: any) => {
-    setForm(prev => ({
-      ...prev,
-      terms: prev.terms.map((term, i) => 
-        i === index ? { ...term, [field]: value } : term
-      )
-    }));
-  };
-
-  const handleUpdateItem = (index: number, field: keyof ContractItem, value: any) => {
-    const updatedItems = form.items.map((item, i) => {
-      if (i === index) {
-        const updatedItem = { ...item, [field]: value };
-        
-        // Auto calculate total price
-        if (field === 'quantity' || field === 'unitPrice' || field === 'discount' || field === 'tax') {
-          const subtotal = updatedItem.quantity * updatedItem.unitPrice;
-          const discountAmount = subtotal * (updatedItem.discount / 100);
-          const afterDiscount = subtotal - discountAmount;
-          const taxAmount = afterDiscount * (updatedItem.tax / 100);
-          updatedItem.totalPrice = afterDiscount + taxAmount;
+  const validateCurrentTab = () => {
+    switch (activeTab) {
+      case 'basic':
+        if (!form.title || !form.contractNumber) {
+          Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin bắt buộc (Tiêu đề và Số hợp đồng)');
+          return false;
         }
-        
-        return updatedItem;
-      }
-      return item;
-    });
-
-    setForm(prev => ({ ...prev, items: updatedItems }));
+        return true;
+      case 'contract':
+        const start = new Date(form.startDate);
+        const sign = new Date(form.signDate);
+        const end = new Date(form.endDate);
+        if (start.getTime() > sign.getTime() || sign.getTime() > end.getTime()) {
+          Alert.alert('Lỗi', 'Ngày không hợp lệ: đảm bảo Ngày bắt đầu <= Ngày ký <= Ngày kết thúc');
+          return false;
+        }
+        return true;
+      default:
+        return true;
+    }
   };
 
-  const handleUploadDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: false,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setLoading(true);
-        const asset = result.assets[0];
-        const documentId = await purchaseOrderService.uploadDocument({
-          uri: asset.uri,
-          name: asset.name,
-          mimeType: asset.mimeType || 'application/octet-stream',
-        });
-        
-        setForm(prev => ({
-          ...prev,
-          documents: [...prev.documents, documentId]
-        }));
-        
-        Alert.alert('Thành công', 'Đã tải lên tài liệu');
-      }
-    } catch (error) {
-      Alert.alert('Lỗi', 'Không thể tải lên tài liệu');
-    } finally {
-      setLoading(false);
+  const handleNextTab = () => {
+    if (!validateCurrentTab()) return;
+    
+    const currentIndex = TABS.findIndex(tab => tab.id === activeTab);
+    if (currentIndex < TABS.length - 1) {
+      setActiveTab(TABS[currentIndex + 1].id);
+    }
+  };
+
+  const handlePrevTab = () => {
+    const currentIndex = TABS.findIndex(tab => tab.id === activeTab);
+    if (currentIndex > 0) {
+      setActiveTab(TABS[currentIndex - 1].id);
+    }
+  };
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'basic':
+        return (
+          <BasicInfoTab 
+            form={form} 
+            setForm={setForm} 
+            suppliers={suppliers} 
+          />
+        );
+      case 'terms':
+        return (
+          <PaymentTermsTab 
+            form={form} 
+            setForm={setForm} 
+          />
+        );
+      case 'products':
+        return (
+          <ProductsTab 
+            form={form} 
+            setForm={setForm} 
+            products={products} 
+          />
+        );
+      case 'contract':
+        return (
+          <ContractTypeTab 
+            form={form} 
+            setForm={setForm} 
+          />
+        );
+      case 'documents':
+        return (
+          <DocumentsTab 
+            form={form} 
+            setForm={setForm} 
+          />
+        );
+      default:
+        return null;
     }
   };
 
   const handleSubmit = async () => {
+    if (!validateCurrentTab()) return;
+    
+    // Final validation
     if (!form.title || !form.contractNumber) {
+      setActiveTab('basic');
       Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin bắt buộc (Tiêu đề và Số hợp đồng)');
       return;
     }
@@ -274,6 +260,7 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
       end.setHours(0, 0, 0, 0);
 
       if (start.getTime() > sign.getTime() || sign.getTime() > end.getTime()) {
+        setActiveTab('contract');
         Alert.alert('Lỗi', 'Ngày không hợp lệ: đảm bảo Ngày bắt đầu <= Ngày ký <= Ngày kết thúc');
         setLoading(false);
         return;
@@ -314,11 +301,20 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
       };
 
       await contractService.createContract(payload);
-      Alert.alert('Thành công', 'Đã tạo hợp đồng');
-      onSuccess?.();
-      onClose();
+      setSnackbar({ visible: true, message: 'Đã tạo hợp đồng thành công', type: 'success' });
+      
+      // Call onSuccess immediately for list refresh
+      if (onSuccess) {
+        onSuccess();
+      }
+      
+      // Close modal after snackbar is shown
+      setTimeout(() => {
+        handleClose();
+      }, 1500);
     } catch (error) {
-      Alert.alert('Lỗi', 'Tạo hợp đồng thất bại');
+      console.error('Contract creation error:', error);
+      setSnackbar({ visible: true, message: 'Tạo hợp đồng thất bại. Vui lòng thử lại.', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -332,418 +328,139 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.overlay}
-      >
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.overlay}
+        >
         <View style={styles.container}>
+          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Tạo hợp đồng</Text>
+            <Text style={styles.title}>Tạo hợp đồng mới</Text>
             <TouchableOpacity onPress={handleClose}>
               <MaterialCommunityIcons name="close" size={24} color={COLORS.gray600} />
             </TouchableOpacity>
           </View>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Basic Information */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
-            
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Tiêu đề hợp đồng *</Text>
-              <TextInput
-                style={styles.input}
-                value={form.title}
-                onChangeText={(text) => setForm(prev => ({ ...prev, title: text }))}
-                placeholder="Nhập tiêu đề hợp đồng"
-              />
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Số hợp đồng *</Text>
-              <TextInput
-                style={styles.input}
-                value={form.contractNumber}
-                onChangeText={(text) => setForm(prev => ({ ...prev, contractNumber: text }))}
-                placeholder="Nhập số hợp đồng"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Mô tả</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={form.description}
-                onChangeText={(text) => setForm(prev => ({ ...prev, description: text }))}
-                placeholder="Nhập mô tả hợp đồng"
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Ghi chú</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={form.note}
-                onChangeText={(text) => setForm(prev => ({ ...prev, note: text }))}
-                placeholder="Nhập ghi chú"
-                multiline
-                numberOfLines={2}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nhà cung cấp *</Text>
-              <View style={styles.pickerContainer}>
-                <Text style={styles.pickerText}>
-                  {suppliers.find(s => s.id === form.supplierId)?.name || 'Chọn nhà cung cấp'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Loại hợp đồng</Text>
-              <View style={styles.row}>
-                <TouchableOpacity
-                  style={[styles.radioButton, form.contractType === 'PURCHASE' && styles.radioActive]}
-                  onPress={() => setForm(prev => ({ ...prev, contractType: 'PURCHASE' }))}
-                >
-                  <Text style={[styles.radioText, form.contractType === 'PURCHASE' && styles.radioTextActive]}>
-                    Mua hàng
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.radioButton, form.contractType === 'SALE' && styles.radioActive]}
-                  onPress={() => setForm(prev => ({ ...prev, contractType: 'SALE' }))}
-                >
-                  <Text style={[styles.radioText, form.contractType === 'SALE' && styles.radioTextActive]}>
-                    Bán hàng
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.row}>
-              <View style={styles.flex1}>
-                <Text style={styles.label}>Ngày bắt đầu *</Text>
-                <TouchableOpacity 
-                  style={styles.input} 
-                  onPress={() => setShowDatePicker({ field: 'startDate', show: true })}
-                >
-                  <Text style={styles.dateText}>{form.startDate.toLocaleDateString('vi-VN')}</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.flex1}>
-                <Text style={styles.label}>Ngày kết thúc *</Text>
-                <TouchableOpacity 
-                  style={styles.input} 
-                  onPress={() => setShowDatePicker({ field: 'endDate', show: true })}
-                >
-                  <Text style={styles.dateText}>{form.endDate.toLocaleDateString('vi-VN')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Ngày ký hợp đồng *</Text>
-              <TouchableOpacity 
-                style={styles.input} 
-                onPress={() => setShowDatePicker({ field: 'signDate', show: true })}
-              >
-                <Text style={styles.dateText}>{form.signDate.toLocaleDateString('vi-VN')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.row}>
-              <View style={styles.flex1}>
-                <Text style={styles.label}>Số ngày thanh toán</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.paymentTermDays.toString()}
-                  onChangeText={(text) => setForm(prev => ({ ...prev, paymentTermDays: parseInt(text) || 30 }))}
-                  placeholder="30"
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={styles.flex1}>
-                <Text style={styles.label}>Giá trị hợp đồng</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.totalValue.toString()}
-                  onChangeText={(text) => setForm(prev => ({ ...prev, totalValue: parseFloat(text) || 0 }))}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phương thức ghi nhận công nợ</Text>
-              <View style={styles.row}>
-                <TouchableOpacity
-                  style={[styles.radioButton, form.debtRecognitionMode === 'IMMEDIATE' && styles.radioActive]}
-                  onPress={() => setForm(prev => ({ ...prev, debtRecognitionMode: 'IMMEDIATE' }))}
-                >
-                  <Text style={[styles.radioText, form.debtRecognitionMode === 'IMMEDIATE' && styles.radioTextActive]}>
-                    Ngay lập tức
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.radioButton, form.debtRecognitionMode === 'BY_COMPLETION' && styles.radioActive]}
-                  onPress={() => setForm(prev => ({ ...prev, debtRecognitionMode: 'BY_COMPLETION' }))}
-                >
-                  <Text style={[styles.radioText, form.debtRecognitionMode === 'BY_COMPLETION' && styles.radioTextActive]}>
-                    Khi hoàn thành
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.radioButton, form.debtRecognitionMode === 'BY_RECEIPT_PARTIAL' && styles.radioActive]}
-                  onPress={() => setForm(prev => ({ ...prev, debtRecognitionMode: 'BY_RECEIPT_PARTIAL' }))}
-                >
-                  <Text style={[styles.radioText, form.debtRecognitionMode === 'BY_RECEIPT_PARTIAL' && styles.radioTextActive]}>
-                    Theo từng phần
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          {/* Terms Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Điều khoản thanh toán</Text>
-              <TouchableOpacity onPress={handleAddTerm} style={styles.addButton}>
-                <MaterialCommunityIcons name="plus" size={20} color={COLORS.primary} />
-                <Text style={styles.addButtonText}>Thêm</Text>
-              </TouchableOpacity>
-            </View>
-            
-            {form.terms.map((term, index) => (
-              <View key={index} style={styles.termCard}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Điều khoản {index + 1}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveTerm(index)}>
-                    <MaterialCommunityIcons name="delete" size={20} color={COLORS.error} />
-                  </TouchableOpacity>
-                </View>
-                
-                <TextInput
-                  style={styles.input}
-                  value={term.title}
-                  onChangeText={(text) => handleUpdateTerm(index, 'title', text)}
-                  placeholder="Tiêu đề điều khoản"
-                />
-                
-                <View style={styles.row}>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Ngày thanh toán</Text>
-                    <TouchableOpacity 
-                      style={styles.input} 
-                      onPress={() => setShowDatePicker({ field: `terms_${index}_paymentDate`, show: true })}
-                    >
-                      <Text style={styles.dateText}>{term.paymentDate.toLocaleDateString('vi-VN')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Ngày đáo hạn</Text>
-                    <TouchableOpacity 
-                      style={styles.input} 
-                      onPress={() => setShowDatePicker({ field: `terms_${index}_dueDate`, show: true })}
-                    >
-                      <Text style={styles.dateText}>{term.dueDate.toLocaleDateString('vi-VN')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                
-                <View style={styles.row}>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Số tiền</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={term.amount.toString()}
-                      onChangeText={(text) => handleUpdateTerm(index, 'amount', parseFloat(text) || 0)}
-                      placeholder="0"
-                      keyboardType="numeric"
+          {/* Tab Navigation */}
+          <View style={styles.tabContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tabScrollContainer}
+            >
+              {TABS.map((tab, index) => {
+                const isActive = activeTab === tab.id;
+                const isCompleted = TABS.findIndex(t => t.id === activeTab) > index;
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    style={[
+                      styles.tab,
+                      isActive && styles.activeTab,
+                      isCompleted && styles.completedTab
+                    ]}
+                    onPress={() => setActiveTab(tab.id)}
+                  >
+                    <MaterialCommunityIcons 
+                      name={isCompleted ? 'check-circle' : tab.icon as any} 
+                      size={20} 
+                      color={
+                        isActive ? COLORS.primary : 
+                        isCompleted ? COLORS.success : 
+                        COLORS.gray400
+                      } 
                     />
-                  </View>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Trạng thái</Text>
-                    <View style={styles.pickerContainer}>
-                      <Text style={styles.pickerText}>
-                        {term.status === 'PENDING' ? 'Chờ xử lý' :
-                         term.status === 'COMPLETED' ? 'Hoàn thành' :
-                         term.status === 'CANCELLED' ? 'Đã hủy' : 'Thất bại'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                
-                <TextInput
-                  style={styles.input}
-                  value={term.note}
-                  onChangeText={(text) => handleUpdateTerm(index, 'note', text)}
-                  placeholder="Ghi chú cho điều khoản"
-                />
-              </View>
-            ))}
-          </View>
-
-          {/* Items Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Sản phẩm/Dịch vụ</Text>
-              <TouchableOpacity onPress={handleAddItem} style={styles.addButton}>
-                <MaterialCommunityIcons name="plus" size={20} color={COLORS.primary} />
-                <Text style={styles.addButtonText}>Thêm</Text>
-              </TouchableOpacity>
-            </View>
-            
-            {form.items.map((item, index) => (
-              <View key={index} style={styles.itemCard}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Sản phẩm {index + 1}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveItem(index)}>
-                    <MaterialCommunityIcons name="delete" size={20} color={COLORS.error} />
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Sản phẩm</Text>
-                  <View style={styles.pickerContainer}>
-                    <Text style={styles.pickerText}>
-                      {products.find(p => p.id === item.productId)?.name || 'Chọn sản phẩm'}
+                    <Text style={[
+                      styles.tabText,
+                      isActive && styles.activeTabText,
+                      isCompleted && styles.completedTabText
+                    ]}>
+                      {tab.title}
                     </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.row}>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Số lượng</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={item.quantity.toString()}
-                      onChangeText={(text) => handleUpdateItem(index, 'quantity', parseFloat(text) || 0)}
-                      placeholder="1"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Đơn giá</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={item.unitPrice.toString()}
-                      onChangeText={(text) => handleUpdateItem(index, 'unitPrice', parseFloat(text) || 0)}
-                      placeholder="0"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
-                <View style={styles.row}>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Thuế (%)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={item.tax.toString()}
-                      onChangeText={(text) => handleUpdateItem(index, 'tax', parseFloat(text) || 0)}
-                      placeholder="0"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={styles.flex1}>
-                    <Text style={styles.label}>Giảm giá (%)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={item.discount.toString()}
-                      onChangeText={(text) => handleUpdateItem(index, 'discount', parseFloat(text) || 0)}
-                      placeholder="0"
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
+          {/* Tab Content */}
+          <View style={styles.content}>
+            {renderTabContent()}
+          </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Tổng tiền: {item.totalPrice.toLocaleString('vi-VN')} VNĐ</Text>
-                </View>
+          {/* Navigation Footer */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[
+                styles.navButton,
+                activeTab === TABS[0].id && styles.navButtonDisabled
+              ]}
+              onPress={handlePrevTab}
+              disabled={activeTab === TABS[0].id}
+            >
+              <MaterialCommunityIcons 
+                name="chevron-left" 
+                size={20} 
+                color={activeTab === TABS[0].id ? COLORS.gray400 : COLORS.primary} 
+              />
+              <Text style={[
+                styles.navButtonText,
+                activeTab === TABS[0].id && styles.navButtonTextDisabled
+              ]}>
+                Quay lại
+              </Text>
+            </TouchableOpacity>
 
-                <TextInput
-                  style={styles.input}
-                  value={item.note}
-                  onChangeText={(text) => handleUpdateItem(index, 'note', text)}
-                  placeholder="Ghi chú cho sản phẩm"
+            <View style={styles.progressContainer}>
+              <Text style={styles.progressText}>
+                {TABS.findIndex(tab => tab.id === activeTab) + 1} / {TABS.length}
+              </Text>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill,
+                    { width: `${((TABS.findIndex(tab => tab.id === activeTab) + 1) / TABS.length) * 100}%` }
+                  ]} 
                 />
               </View>
-            ))}
-          </View>
+            </View>
 
-          {/* Documents */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Tài liệu</Text>
-            <TouchableOpacity style={styles.uploadButton} onPress={handleUploadDocument}>
-              <MaterialCommunityIcons name="upload" size={20} color={COLORS.primary} />
-              <Text style={styles.uploadText}>Tải lên tài liệu</Text>
-            </TouchableOpacity>
-            {form.documents.length > 0 && (
-              <Text style={styles.documentCount}>{form.documents.length} tài liệu đã tải lên</Text>
-            )}
-          </View>
-
-          {/* Submit Button */}
-          <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={COLORS.white} />
+            {activeTab === TABS[TABS.length - 1].id ? (
+              <TouchableOpacity
+                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                onPress={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={COLORS.white} size="small" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="check" size={20} color={COLORS.white} />
+                    <Text style={styles.submitText}>Tạo </Text>
+                  </>
+                )}
+              </TouchableOpacity>
             ) : (
-              <Text style={styles.submitText}>Tạo hợp đồng</Text>
+              <TouchableOpacity
+                style={styles.navButton}
+                onPress={handleNextTab}
+              >
+                <Text style={styles.navButtonText}>Tiếp theo</Text>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.primary} />
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
+          </View>
+        </View>
       </KeyboardAvoidingView>
-
-      {/* Date Picker */}
-      {showDatePicker.show && (
-        <DateTimePicker
-          value={(() => {
-            try {
-              const field = showDatePicker.field;
-              if (['startDate', 'endDate', 'signDate'].includes(field)) {
-                return form[field as 'startDate' | 'endDate' | 'signDate'] || new Date();
-              }
-              if (field.startsWith('terms_')) {
-                const parts = field.split('_');
-                const idx = parseInt(parts[1]);
-                const dateField = parts[2] as 'paymentDate' | 'dueDate';
-                return form.terms?.[idx]?.[dateField] || new Date();
-              }
-            } catch (e) {
-              // fallback
-            }
-            return new Date();
-          })()}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowDatePicker({ field: '', show: false });
-            if (selectedDate && showDatePicker.field) {
-              // Handle regular date fields
-              if (['startDate', 'endDate', 'signDate'].includes(showDatePicker.field)) {
-                setForm(prev => ({ ...prev, [showDatePicker.field]: selectedDate }));
-              }
-              // Handle terms date fields
-              else if (showDatePicker.field.startsWith('terms_')) {
-                const parts = showDatePicker.field.split('_');
-                const termIndex = parseInt(parts[1]);
-                const dateField = parts[2] as 'paymentDate' | 'dueDate';
-                handleUpdateTerm(termIndex, dateField, selectedDate);
-              }
-            }
-          }}
-        />
-      )}
+      </SafeAreaView>
+      
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
+      />
     </Modal>
   );
 }
@@ -755,178 +472,139 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: COLORS.gray50,
+    backgroundColor: COLORS.white,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray200,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.gray800,
   },
-  scrollView: {
-    flex: 1,
-    padding: 16,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.gray800,
-    marginBottom: 12,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray800,
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+  tabContainer: {
     backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
+  tabScrollContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  flex1: {
-    flex: 1,
-  },
-  radioButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-  },
-  radioActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
-  },
-  radioText: {
-    fontSize: 12,
-    color: COLORS.gray600,
-    textAlign: 'center',
-  },
-  radioTextActive: {
-    color: COLORS.primary,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  uploadButton: {
+  tab: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 8,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 8,
-    backgroundColor: COLORS.primary + '10',
+    marginRight: 8,
+    borderRadius: 10,
+    backgroundColor: COLORS.gray100,
+    minWidth: 120,
   },
-  uploadText: {
+  activeTab: {
+    backgroundColor: COLORS.primary + '20',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  completedTab: {
+    backgroundColor: COLORS.success + '20',
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  tabText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.gray600,
+  },
+  activeTabText: {
     color: COLORS.primary,
-    fontSize: 14,
     fontWeight: '600',
   },
-  documentCount: {
-    fontSize: 12,
-    color: COLORS.gray600,
-    marginTop: 4,
+  completedTabText: {
+    color: COLORS.success,
+    fontWeight: '600',
   },
-  sectionHeader: {
+  content: {
+    flex: 1,
+    backgroundColor: COLORS.gray50,
+  },
+  footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray200,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
-  addButton: {
+  navButton: {
     flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.gray100,
+    gap: 6,
+  },
+  navButtonDisabled: {
+    opacity: 0.5,
+  },
+  navButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  navButtonTextDisabled: {
+    color: COLORS.gray400,
+  },
+  progressContainer: {
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: COLORS.primary + '10',
   },
-  addButtonText: {
-    color: COLORS.primary,
+  progressText: {
     fontSize: 12,
-    fontWeight: '600',
+    color: COLORS.gray600,
+    fontWeight: '500',
   },
-  termCard: {
-    backgroundColor: COLORS.gray50,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
+  progressBar: {
+    width: 80,
+    height: 4,
+    backgroundColor: COLORS.gray200,
+    borderRadius: 2,
+    overflow: 'hidden',
   },
-  itemCard: {
-    backgroundColor: COLORS.gray50,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.gray800,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: COLORS.white,
-  },
-  pickerText: {
-    fontSize: 14,
-    color: COLORS.gray800,
-  },
-  dateText: {
-    fontSize: 14,
-    color: COLORS.gray800,
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
   },
   submitButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    paddingVertical: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 16,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
   },
   submitButtonDisabled: {
     opacity: 0.6,

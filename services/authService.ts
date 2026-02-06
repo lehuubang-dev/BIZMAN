@@ -101,6 +101,32 @@ class AuthService {
   async setToken(token: string) {
     await apiClient.setToken(token);
   }
+
+  /**
+   * Get user profile
+   */
+  async getUserProfile(): Promise<any> {
+    try {
+      const response = await apiClient.get<any>('/api/v1/user/user-profile');
+      return response?.data || response;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get business profile
+   */
+  async getBusinessProfile(): Promise<any> {
+    try {
+      const response = await apiClient.get<any>('/api/v1/user/get-bussiness-profile');
+      return response?.data || response;
+    } catch (error) {
+      console.error('Error fetching business profile:', error);
+      throw error;
+    }
+  }
 }
 
 export const authService = new AuthService();

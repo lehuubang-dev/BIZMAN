@@ -16,18 +16,7 @@ export const FloatingButtons: React.FC<FloatingButtonsProps> = ({
 }) => {
   return (
     <View style={styles.floatingButtons}>
-      {/* Chat Button */}
-      <TouchableOpacity
-        style={styles.fabChat}
-        activeOpacity={0.8}
-        onPress={onChatPress}
-      >
-        <MaterialCommunityIcons
-          name="robot-happy-outline"
-          size={28}
-          color="white"
-        />
-      </TouchableOpacity>
+
 
       {/* Cart Button */}
       <TouchableOpacity

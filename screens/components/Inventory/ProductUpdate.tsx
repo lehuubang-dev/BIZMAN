@@ -1,10 +1,21 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import RNPickerSelect from 'react-native-picker-select';
-import * as ImagePicker from 'expo-image-picker';
-import { productService } from '../../../services/productService';
-import { COLORS } from './constants';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Image,
+} from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import RNPickerSelect from "react-native-picker-select";
+import * as ImagePicker from "expo-image-picker";
+import { productService } from "../../../services/productService";
+import { COLORS } from "../../../constants/colors";
+import Snackbar from "../common/Snackbar";
 
 interface ProductUpdateProps {
   productId: string;
@@ -32,38 +43,58 @@ interface ImageItem {
   isPrimary: boolean;
 }
 
-export default function ProductUpdate({ productId, onClose, onSuccess }: ProductUpdateProps) {
+const PRODUCT_UNITS = [
+  { label: "Cái", value: "cái" },
+  { label: "Chiếc", value: "chiếc" },
+  { label: "Bộ", value: "bộ" },
+  { label: "Kg", value: "kg" },
+  { label: "Gam", value: "gam" },
+  { label: "Lít", value: "lít" },
+  { label: "Mét", value: "mét" },
+  { label: "Thùng", value: "thùng" },
+  { label: "Hộp", value: "hộp" },
+];
+
+export default function ProductUpdate({
+  productId,
+  onClose,
+  onSuccess,
+}: ProductUpdateProps) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  
-  // Dropdowns data
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
-  
-  // Images
+
   const [images, setImages] = useState<ImageItem[]>([]);
-  
-  // Form fields
+
+  const [snackbar, setSnackbar] = useState({
+    visible: false,
+    message: "",
+    type: "success" as "success" | "error",
+  });
+
   const [formData, setFormData] = useState({
     id: productId,
-    productCategoryId: '',
-    productGroupId: '',
-    brandId: '',
-    tags: '',
-    sku: '',
-    name: '',
-    description: '',
-    type: 'PHYSICAL',
-    unit: 'cái',
-    model: '',
-    partNumber: '',
-    serialNumber: '',
-    costPrice: '',
-    sellPrice: '',
-    minStock: '',
+    productCategoryId: "",
+    productGroupId: "",
+    brandId: "",
+    tags: [] as string[],
+    name: "",
+    description: "",
+    type: "PHYSICAL",
+    unit: "cái",
+    model: "",
+    partNumber: "",
+    serialNumber: "",
+    costPrice: 0,
+    sellPrice: 0,
+    minStock: 0,
   });
+
+  const [tagsInput, setTagsInput] = useState("");
 
   useEffect(() => {
     loadData();
@@ -72,7 +103,6 @@ export default function ProductUpdate({ productId, onClose, onSuccess }: Product
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load product details and dropdown data in parallel
       const [product, cats, grps, brnds] = await Promise.all([
         productService.getProductDetail(productId),
         productService.getProductCategories(),
@@ -85,35 +115,36 @@ export default function ProductUpdate({ productId, onClose, onSuccess }: Product
       setBrands(brnds);
 
       if (product) {
-        // Load existing images
-        const existingImages = product.images?.map(img => ({
-          url: img.imageUrl,
-          isPrimary: img.isPrimary
-        })) || [];
+        const existingImages =
+          product.images?.map((img) => ({
+            url: img.imageUrl,
+            isPrimary: img.isPrimary,
+          })) || [];
         setImages(existingImages);
-        
-        // Populate form with existing product data
+
+        const existingTags = product.tags?.map((t: any) => t.name) || [];
         setFormData({
           id: product.id,
-          productCategoryId: product.productCategory?.id || '',
-          productGroupId: product.productGroup?.id || '',
-          brandId: product.brand?.id || '',
-          tags: product.tags?.map(t => '#' + t.name).join(', ') || '',
-          sku: product.sku || '',
-          name: product.name || '',
-          description: product.description || '',
-          type: product.type || 'PHYSICAL',
-          unit: product.unit || 'cái',
-          model: (product as any).model || '',
-          partNumber: (product as any).partNumber || '',
-          serialNumber: (product as any).serialNumber || '',
-          costPrice: product.costPrice?.toString() || '',
-          sellPrice: product.sellPrice?.toString() || '',
-          minStock: product.minStock?.toString() || '',
+          productCategoryId: product.productCategory?.id || "",
+          productGroupId: product.productGroup?.id || "",
+          brandId: product.brand?.id || "",
+          tags: existingTags,
+          name: product.name || "",
+          description: product.description || "",
+          type: product.type || "PHYSICAL",
+          unit: product.unit || "cái",
+          model: (product as any).model || "",
+          partNumber: (product as any).partNumber || "",
+          serialNumber: (product as any).serialNumber || "",
+          costPrice: product.costPrice || 0,
+          sellPrice: product.sellPrice || 0,
+          minStock: product.minStock || 0,
         });
+
+        setTagsInput(existingTags.join(", "));
       }
     } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể tải dữ liệu');
+      Alert.alert("Lỗi", err?.message || "Không thể tải dữ liệu");
     } finally {
       setLoading(false);
     }
@@ -132,7 +163,7 @@ export default function ProductUpdate({ productId, onClose, onSuccess }: Product
         await uploadImage(result.assets[0]);
       }
     } catch (error: any) {
-      Alert.alert('Lỗi', error?.message || 'Không thể chọn ảnh');
+      Alert.alert("Lỗi", error?.message || "Không thể chọn ảnh");
     }
   };
 
@@ -142,18 +173,17 @@ export default function ProductUpdate({ productId, onClose, onSuccess }: Product
       const file = {
         uri: asset.uri,
         name: asset.fileName || `image_${Date.now()}.jpg`,
-        mimeType: asset.mimeType || 'image/jpeg',
+        mimeType: asset.mimeType || "image/jpeg",
       };
 
       const imageUrl = await productService.uploadImage(file);
-      
-      // Add to images array, set as primary if it's the first image
-      setImages(prev => [
+
+      setImages((prev) => [
         ...prev,
-        { url: imageUrl, isPrimary: prev.length === 0 }
+        { url: imageUrl, isPrimary: prev.length === 0 },
       ]);
     } catch (error: any) {
-      Alert.alert('Lỗi', error?.message || 'Không thể tải ảnh lên');
+      Alert.alert("Lỗi", error?.message || "Không thể tải ảnh lên");
     } finally {
       setUploadingImage(false);
     }
@@ -161,7 +191,6 @@ export default function ProductUpdate({ productId, onClose, onSuccess }: Product
 
   const handleRemoveImage = (index: number) => {
     const newImages = images.filter((_, i) => i !== index);
-    // If removed image was primary, set first image as primary
     if (images[index].isPrimary && newImages.length > 0) {
       newImages[0].isPrimary = true;
     }
@@ -169,543 +198,702 @@ export default function ProductUpdate({ productId, onClose, onSuccess }: Product
   };
 
   const handleSetPrimaryImage = (index: number) => {
-    setImages(prev => prev.map((img, i) => ({
-      ...img,
-      isPrimary: i === index
-    })));
+    setImages((prev) =>
+      prev.map((img, i) => ({
+        ...img,
+        isPrimary: i === index,
+      })),
+    );
   };
 
   const handleSubmit = async () => {
-    // if (!formData.name || !formData.sku || !formData.productCode) {
-    //   Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin bắt buộc');
-    //   return;
-    // }
+    if (!formData.name.trim()) {
+      Alert.alert("Lỗi", "Vui lòng nhập tên sản phẩm");
+      return;
+    }
 
     setSubmitting(true);
     try {
-      // Remove # from tags before sending
-      const cleanTags = formData.tags 
-        ? formData.tags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean) 
-        : [];
-
-      // Convert images array to URL strings
-      const imageUrls = images.map(img => img.url);
+      const imageUrls = images.map((img) => img.url);
 
       const payload = {
         id: formData.id,
-        productCategoryId: formData.productCategoryId || undefined,
-        productGroupId: formData.productGroupId || undefined,
-        brandId: formData.brandId || undefined,
-        tags: cleanTags,
+        ...(formData.productCategoryId && {
+          productCategoryId: formData.productCategoryId,
+        }),
+        ...(formData.productGroupId && {
+          productGroupId: formData.productGroupId,
+        }),
+        ...(formData.brandId && { brandId: formData.brandId }),
+        tags: formData.tags,
         images: imageUrls,
-        name: formData.name,
-        description: formData.description,
+        name: formData.name.trim(),
+        description: formData.description.trim(),
         type: formData.type,
         unit: formData.unit,
-        model: formData.model || undefined,
-        partNumber: formData.partNumber || undefined,
-        serialNumber: formData.serialNumber || undefined,
-        costPrice: parseFloat(formData.costPrice) || 0,
-        sellPrice: parseFloat(formData.sellPrice) || 0,
-        minStock: parseInt(formData.minStock) || 0,
+        model: formData.model?.trim() || undefined,
+        partNumber: formData.partNumber?.trim() || undefined,
+        serialNumber: formData.serialNumber?.trim() || undefined,
+        costPrice: Number(formData.costPrice),
+        sellPrice: Number(formData.sellPrice),
+        minStock: Number(formData.minStock),
       };
 
       await productService.updateProduct(payload);
-      
-      // Refresh list and close modal
-      onSuccess?.();
-      onClose();
-      
-      // Show success message
-    } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể cập nhật sản phẩm');
+
+      setSnackbar({
+        visible: true,
+        message: "Cập nhật thành công!",
+        type: "success",
+      });
+
+      setTimeout(() => {
+        if (onSuccess) onSuccess();
+        onClose();
+      }, 1500);
+    } catch (error: any) {
+      let errorMessage = "Không thể cập nhật sản phẩm";
+
+      if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      setSnackbar({
+        visible: true,
+        message: errorMessage,
+        type: "error",
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleTagsChange = (text: string) => {
-    // Format tags with # prefix
-    const formatted = text
-      .split(',')
-      .map(tag => {
-        const trimmed = tag.trim();
-        if (trimmed && !trimmed.startsWith('#')) {
-          return '#' + trimmed;
-        }
-        return trimmed;
-      })
-      .join(', ');
-    setFormData({ ...formData, tags: formatted });
+    setTagsInput(text);
+    const tags = text
+      .split(",")
+      .map((t: string) => t.trim().replace(/^#/, ""))
+      .filter(Boolean);
+    setFormData((prev) => ({ ...prev, tags }));
   };
 
   return (
     <View style={styles.overlay}>
-      <View style={styles.container}>
+      <View style={styles.modal}>
+        {/* Header */}
         <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View style={styles.iconCircle}>
+              <MaterialCommunityIcons
+                name="pencil-outline"
+                size={24}
+                color={COLORS.primary}
+              />
+            </View>
+            <View>
+              <Text style={styles.title}>Cập nhật sản phẩm</Text>
+              <Text style={styles.subtitle}>Chỉnh sửa thông tin sản phẩm</Text>
+            </View>
+          </View>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <MaterialCommunityIcons name="close" size={22} color={COLORS.gray800} />
+            <MaterialCommunityIcons name="close" size={22} color="#6B7280" />
           </TouchableOpacity>
-          <Text style={styles.title}>Cập nhật hàng hóa</Text>
         </View>
 
         {loading ? (
-          <View style={styles.center}>
+          <View style={styles.centerContent}>
             <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Đang tải...</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Name */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Tên sản phẩm <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                value={formData.name}
-                onChangeText={(text) => setFormData({ ...formData, name: text })}
-                placeholder="Nhập tên sản phẩm"
-                placeholderTextColor={COLORS.gray400}
-              />
-            </View>
-
-            {/* Images Section */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Hình ảnh sản phẩm</Text>
-              
-              {/* Image Grid */}
-              <View style={styles.imageGrid}>
-                {images.map((img, index) => (
-                  <View key={index} style={styles.imageItem}>
-                    <Image source={{ uri: img.url }} style={styles.imageThumbnail} />
-                    
-                    {/* Primary Badge */}
-                    {img.isPrimary && (
-                      <View style={styles.primaryBadge}>
-                        <MaterialCommunityIcons name="star" size={12} color="#FFF" />
-                      </View>
-                    )}
-                    
-                    {/* Actions */}
-                    <View style={styles.imageActions}>
-                      {!img.isPrimary && (
-                        <TouchableOpacity
-                          style={styles.imageActionBtn}
-                          onPress={() => handleSetPrimaryImage(index)}
-                        >
-                          <MaterialCommunityIcons name="star-outline" size={16} color="#FFF" />
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity
-                        style={[styles.imageActionBtn, styles.deleteBtn]}
-                        onPress={() => handleRemoveImage(index)}
-                      >
-                        <MaterialCommunityIcons name="trash-can-outline" size={16} color="#FFF" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-                
-                {/* Add Image Button */}
-                <TouchableOpacity
-                  style={styles.addImageBtn}
-                  onPress={handlePickImage}
-                  disabled={uploadingImage}
-                >
-                  {uploadingImage ? (
-                    <ActivityIndicator size="small" color={COLORS.primary} />
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons name="camera-plus" size={28} color={COLORS.primary} />
-                      <Text style={styles.addImageText}>Thêm ảnh</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* SKU */}
-            <View style={styles.field}>
-              <Text style={styles.label}>SKU <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: '#F9FAFB' }]}
-                value={formData.sku}
-                placeholder="Mã SKU"
-                placeholderTextColor={COLORS.gray400}
-                editable={false}
-              />
-            </View>
-
-            {/* Description */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Mô tả</Text>
-              <TextInput
-                style={[styles.input, { height: 80 }]}
-                value={formData.description}
-                onChangeText={(text) => setFormData({ ...formData, description: text })}
-                placeholder="Mô tả sản phẩm"
-                placeholderTextColor={COLORS.gray400}
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-
-            {/* Category, Group, Brand */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Phân loại</Text>
-              
-              <View style={styles.field}>
-                <Text style={styles.label}>Danh mục</Text>
-                <RNPickerSelect
-                  onValueChange={(value) => setFormData({ ...formData, productCategoryId: value })}
-                  items={categories.map(cat => ({ label: cat.name, value: cat.id }))}
-                  value={formData.productCategoryId}
-                  placeholder={{ label: 'Chọn danh mục...', value: null }}
-                  style={{
-                    inputIOS: styles.pickerInput,
-                    inputAndroid: styles.pickerInput,
-                    placeholder: { color: '#999' },
-                  }}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Nhóm hàng</Text>
-                <RNPickerSelect
-                  onValueChange={(value) => setFormData({ ...formData, productGroupId: value })}
-                  items={groups.map(grp => ({ label: grp.name, value: grp.id }))}
-                  value={formData.productGroupId}
-                  placeholder={{ label: 'Chọn nhóm hàng...', value: null }}
-                  style={{
-                    inputIOS: styles.pickerInput,
-                    inputAndroid: styles.pickerInput,
-                    placeholder: { color: '#999' },
-                  }}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Thương hiệu</Text>
-                <RNPickerSelect
-                  onValueChange={(value) => setFormData({ ...formData, brandId: value })}
-                  items={brands.map(brd => ({ label: brd.name, value: brd.id }))}
-                  value={formData.brandId}
-                  placeholder={{ label: 'Chọn thương hiệu...', value: null }}
-                  style={{
-                    inputIOS: styles.pickerInput,
-                    inputAndroid: styles.pickerInput,
-                    placeholder: { color: '#999' },
-                  }}
-                />
-              </View>
-            </View>
-
-            {/* Type & Unit */}
-            <View style={styles.row}>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Loại</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.type}
-                  onChangeText={(text) => setFormData({ ...formData, type: text })}
-                  placeholder="PHYSICAL"
-                  placeholderTextColor={COLORS.gray400}
-                />
-              </View>
-              <View style={{ width: 12 }} />
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Đơn vị</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.unit}
-                  onChangeText={(text) => setFormData({ ...formData, unit: text })}
-                  placeholder="cái"
-                  placeholderTextColor={COLORS.gray400}
-                />
-              </View>
-            </View>
-
-            {/* Model & Part Number */}
-            <View style={styles.row}>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Model</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.model}
-                  onChangeText={(text) => setFormData({ ...formData, model: text })}
-                  placeholder="I5-12900K"
-                  placeholderTextColor={COLORS.gray400}
-                />
-              </View>
-              <View style={{ width: 12 }} />
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Part Number</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.partNumber}
-                  onChangeText={(text) => setFormData({ ...formData, partNumber: text })}
-                  placeholder="I5-12900K-90C120T"
-                  placeholderTextColor={COLORS.gray400}
-                />
-              </View>
-            </View>
-
-            {/* Serial Number */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Serial Number</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.serialNumber}
-                onChangeText={(text) => setFormData({ ...formData, serialNumber: text })}
-                placeholder="SN-547785524"
-                placeholderTextColor={COLORS.gray400}
-              />
-            </View>
-
-            {/* Prices */}
-            <View style={styles.row}>
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Giá vốn</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.costPrice}
-                  onChangeText={(text) => setFormData({ ...formData, costPrice: text })}
-                  placeholder="0"
-                  placeholderTextColor={COLORS.gray400}
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={{ width: 12 }} />
-              <View style={[styles.field, { flex: 1 }]}>
-                <Text style={styles.label}>Giá bán</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.sellPrice}
-                  onChangeText={(text) => setFormData({ ...formData, sellPrice: text })}
-                  placeholder="0"
-                  placeholderTextColor={COLORS.gray400}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-
-            {/* Min Stock */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Tồn tối thiểu</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.minStock}
-                onChangeText={(text) => setFormData({ ...formData, minStock: text })}
-                placeholder="0"
-                placeholderTextColor={COLORS.gray400}
-                keyboardType="numeric"
-              />
-            </View>
-
-            {/* Tags */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Tags (cách nhau bằng dấu phẩy)</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.tags}
-                onChangeText={handleTagsChange}
-                placeholder="#tag1, #tag2, #tag3"
-                placeholderTextColor={COLORS.gray400}
-              />
-            </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
+          <>
+            <ScrollView
+              style={styles.content}
+              contentContainerStyle={styles.contentPadding}
+              showsVerticalScrollIndicator={false}
             >
-              {submitting ? (
-                <ActivityIndicator size="small" color={COLORS.white} />
-              ) : (
-                <Text style={styles.submitText}>Cập nhật</Text>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
+              <View style={styles.formContainer}>
+                {/* Basic Info */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <MaterialCommunityIcons
+                      name="information"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.sectionTitle}>Thông tin sản phẩm</Text>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>
+                      Tên sản phẩm <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name}
+                      onChangeText={(text) =>
+                        setFormData({ ...formData, name: text })
+                      }
+                      placeholder="Nhập tên sản phẩm"
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Mô tả</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={formData.description}
+                      onChangeText={(text) =>
+                        setFormData({ ...formData, description: text })
+                      }
+                      placeholder="Mô tả chi tiết về sản phẩm"
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      numberOfLines={4}
+                      textAlignVertical="top"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Loại sản phẩm</Text>
+                    <RNPickerSelect
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, type: value })
+                      }
+                      items={[
+                        { label: "Sản phẩm vật lý", value: "PHYSICAL" },
+                        { label: "Sản phẩm số", value: "DIGITAL" },
+                        { label: "Dịch vụ", value: "SERVICE" },
+                      ]}
+                      value={formData.type}
+                      style={{
+                        inputIOS: styles.picker,
+                        inputAndroid: styles.picker,
+                      }}
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Đơn vị</Text>
+                    <RNPickerSelect
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, unit: value })
+                      }
+                      items={PRODUCT_UNITS}
+                      value={formData.unit}
+                      style={{
+                        inputIOS: styles.picker,
+                        inputAndroid: styles.picker,
+                      }}
+                    />
+                  </View>
+                </View>
+
+                {/* Images */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <MaterialCommunityIcons
+                      name="image-multiple"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.sectionTitle}>Hình ảnh</Text>
+                  </View>
+
+                  <View style={styles.imageGrid}>
+                    {images.map((img, index) => (
+                      <View key={index} style={styles.imageBox}>
+                        <Image source={{ uri: img.url }} style={styles.image} />
+
+                        {img.isPrimary && (
+                          <View style={styles.primaryTag}>
+                            <MaterialCommunityIcons
+                              name="star"
+                              size={10}
+                              color="#FFF"
+                            />
+                          </View>
+                        )}
+
+                        <View style={styles.imageOverlay}>
+                          {!img.isPrimary && (
+                            <TouchableOpacity
+                              style={styles.overlayBtn}
+                              onPress={() => handleSetPrimaryImage(index)}
+                            >
+                              <MaterialCommunityIcons
+                                name="star-outline"
+                                size={14}
+                                color="#FFF"
+                              />
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity
+                            style={[styles.overlayBtn, styles.deleteOverlay]}
+                            onPress={() => handleRemoveImage(index)}
+                          >
+                            <MaterialCommunityIcons
+                              name="delete-outline"
+                              size={14}
+                              color="#FFF"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+
+                    <TouchableOpacity
+                      style={styles.addImageBox}
+                      onPress={handlePickImage}
+                      disabled={uploadingImage}
+                    >
+                      {uploadingImage ? (
+                        <ActivityIndicator color={COLORS.primary} />
+                      ) : (
+                        <>
+                          <MaterialCommunityIcons
+                            name="camera-plus"
+                            size={32}
+                            color={COLORS.primary}
+                          />
+                          <Text style={styles.addImageText}>Thêm ảnh</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Classification */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <MaterialCommunityIcons
+                      name="shape"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.sectionTitle}>Phân loại</Text>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Danh mục</Text>
+                    <RNPickerSelect
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, productCategoryId: value })
+                      }
+                      items={categories.map((cat) => ({
+                        label: cat.name,
+                        value: cat.id,
+                      }))}
+                      value={formData.productCategoryId}
+                      placeholder={{ label: "Chọn danh mục", value: null }}
+                      style={{
+                        inputIOS: styles.picker,
+                        inputAndroid: styles.picker,
+                        placeholder: { color: "#9CA3AF" },
+                      }}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Nhóm sản phẩm</Text>
+                    <RNPickerSelect
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, productGroupId: value })
+                      }
+                      items={groups.map((group) => ({
+                        label: group.name,
+                        value: group.id,
+                      }))}
+                      value={formData.productGroupId}
+                      placeholder={{ label: "Chọn nhóm", value: null }}
+                      style={{
+                        inputIOS: styles.picker,
+                        inputAndroid: styles.picker,
+                        placeholder: { color: "#9CA3AF" },
+                      }}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Thương hiệu</Text>
+                    <RNPickerSelect
+                      onValueChange={(value) =>
+                        setFormData({ ...formData, brandId: value })
+                      }
+                      items={brands.map((brand) => ({
+                        label: brand.name,
+                        value: brand.id,
+                      }))}
+                      value={formData.brandId}
+                      placeholder={{ label: "Chọn thương hiệu", value: null }}
+                      style={{
+                        inputIOS: styles.picker,
+                        inputAndroid: styles.picker,
+                        placeholder: { color: "#9CA3AF" },
+                      }}
+                    />
+                  </View>
+                </View>
+
+                {/* Tags */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <MaterialCommunityIcons
+                      name="tag-multiple"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                    <Text style={styles.sectionTitle}>Tags</Text>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>
+                      Từ khóa (phân cách bằng dấu phẩy)
+                    </Text>
+                    <TextInput
+                      style={styles.input}
+                      value={tagsInput}
+                      onChangeText={handleTagsChange}
+                      placeholder="gaming, laptop, cao cấp"
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+
+                  {formData.tags.length > 0 && (
+                    <View style={styles.tagsList}>
+                      {formData.tags.map((tag, index) => (
+                        <View key={index} style={styles.tag}>
+                          <Text style={styles.tagLabel}>#{tag}</Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              const newTags = formData.tags.filter(
+                                (_, i) => i !== index,
+                              );
+                              setFormData({ ...formData, tags: newTags });
+                              setTagsInput(newTags.join(", "));
+                            }}
+                          >
+                            <MaterialCommunityIcons
+                              name="close-circle"
+                              size={14}
+                              color={COLORS.primary}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.footer}>
+              <TouchableOpacity
+                style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
+                onPress={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFF" />
+                    <Text style={styles.submitText}>Đang cập nhật...</Text>
+                  </>
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={18}
+                      color="#FFF"
+                    />
+                    <Text style={styles.submitText}>Cập nhật</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
         )}
       </View>
+
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar((prev) => ({ ...prev, visible: false }))}
+        duration={snackbar.type === "success" ? 1500 : 4000}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-    zIndex: 200,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+    zIndex: 9999,
   },
-  container: {
-    width: '100%',
-    maxHeight: '95%',
-    backgroundColor: COLORS.white,
+  modal: {
+    backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    maxHeight: "95%",
+    minHeight: "85%",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 20,
   },
+
+  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
-    backgroundColor: COLORS.white,
+    borderBottomColor: "#F3F4F6",
   },
-  closeBtn: {
-    padding: 8,
-    marginRight: 12,
-    borderRadius: 8,
-    backgroundColor: COLORS.gray100,
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.gray800,
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  subtitle: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Content
+  content: {
     flex: 1,
   },
-  center: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
+  contentPadding: {
+    padding: 20,
   },
-  content: {
-    padding: 16,
-    gap: 16,
+  formContainer: {
+    gap: 20,
   },
+
+  // Section
   section: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.gray800,
-    marginBottom: 4,
-  },
-  imageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  imageItem: {
-    width: 100,
-    height: 100,
-    position: 'relative',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  imageThumbnail: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-  },
-  primaryBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#F59E0B',
-    borderRadius: 12,
-    padding: 4,
-  },
-  imageActions: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 4,
-    gap: 4,
-  },
-  imageActionBtn: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 4,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
   },
-  deleteBtn: {
-    backgroundColor: 'rgba(239,68,68,0.8)',
-  },
-  addImageBtn: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  addImageText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  field: {
-    gap: 8,
+
+  // Input
+  inputGroup: {
+    marginBottom: 16,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.gray800,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
   },
-  required: {
-    color: '#DC2626',
+  asterisk: {
+    color: "#EF4444",
   },
   input: {
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: COLORS.gray800,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#111827",
+    backgroundColor: "#FAFAFA",
+  },
+  textArea: {
+    height: 90,
+    paddingTop: 12,
+  },
+  picker: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+
+    paddingHorizontal: 14,
+    paddingVertical: 1,
+    fontSize: 13,
+    color: "#111827",
+    backgroundColor: "#FAFAFA",
   },
   row: {
-    flexDirection: 'row',
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
   },
-  pickerInput: {
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: COLORS.gray800,
-    backgroundColor: COLORS.white,
+  halfInput: {
+    flex: 1,
   },
-  submitBtn: {
-    backgroundColor: '#F59E0B',
-    paddingVertical: 14,
+
+  // Images
+  imageGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  imageBox: {
+    position: "relative",
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  image: {
+    width: "100%",
+    height: "100%",
+  },
+  primaryTag: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: "#F59E0B",
     borderRadius: 10,
-    alignItems: 'center',
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  imageOverlay: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    flexDirection: "row",
+    gap: 4,
+  },
+  overlayBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteOverlay: {
+    backgroundColor: "#EF4444",
+  },
+  addImageBox: {
+    width: 90,
+    height: 90,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: COLORS.primary,
+    backgroundColor: "#F8FAFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addImageText: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+
+  // Tags
+  tagsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     marginTop: 8,
   },
-  submitBtnDisabled: {
-    opacity: 0.6,
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  tagLabel: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: "600",
+  },
+
+  // Footer
+  footer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    backgroundColor: "#FAFAFA",
+  },
+  submitBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#10B981",
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitText: {
-    color: COLORS.white,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "600",
+    color: "#FFF",
+  },
+
+  // Loading
+  centerContent: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 12,
   },
 });
