@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ContractListItem } from '../../../types/contract';
+import DialogNotification from '../common/DialogNotification';
+import Snackbar from '../common/Snackbar';
 
 const COLORS = {
   primary: '#2196F3',
@@ -36,9 +38,93 @@ interface ContractListProps {
 
 export default function ContractList({ contracts, onView, onUpdate, onDelete, onCancel, onActivate }: ContractListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState({
+    visible: false,
+    type: 'confirm' as const,
+    title: '',
+    message: '',
+    contractId: '',
+    action: '' as 'delete' | 'activate' | 'cancel',
+  });
+  const [snackbar, setSnackbar] = useState({
+    visible: false,
+    message: '',
+    type: 'success' as 'success' | 'error',
+  });
 
   const handleToggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
+  };
+
+  const showDeleteConfirm = (contractId: string, contractNumber: string) => {
+    setDialog({
+      visible: true,
+      type: 'confirm',
+      title: 'Xác nhận xóa hợp đồng',
+      message: `Bạn có chắc chắn muốn xóa hợp đồng "${contractNumber}"? Thao tác này không thể hoàn tác.`,
+      contractId,
+      action: 'delete',
+    });
+  };
+
+  const showActivateConfirm = (contractId: string, contractNumber: string) => {
+    setDialog({
+      visible: true,
+      type: 'confirm',
+      title: 'Xác nhận kích hoạt hợp đồng',
+      message: `Bạn có chắc chắn muốn kích hoạt hợp đồng "${contractNumber}"?`,
+      contractId,
+      action: 'activate',
+    });
+  };
+
+  const showCancelConfirm = (contractId: string, contractNumber: string) => {
+    setDialog({
+      visible: true,
+      type: 'confirm',
+      title: 'Xác nhận hủy hợp đồng',
+      message: `Bạn có chắc chắn muốn hủy hợp đồng "${contractNumber}"? Hợp đồng sẽ chuyển sang trạng thái đã hủy.`,
+      contractId,
+      action: 'cancel',
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const { contractId, action } = dialog;
+    setDialog({ ...dialog, visible: false });
+    
+    try {
+      switch (action) {
+        case 'delete':
+          if (onDelete) {
+            await onDelete(contractId);
+            setExpandedId(null); // Đóng menu sau khi xóa thành công
+          }
+          break;
+        case 'activate':
+          if (onActivate) {
+            await onActivate(contractId);
+            setExpandedId(null); // Đóng menu sau khi kích hoạt thành công
+          }
+          break;
+        case 'cancel':
+          if (onCancel) {
+            await onCancel(contractId);
+            setExpandedId(null); // Đóng menu sau khi hủy thành công
+          }
+          break;
+      }
+    } catch (error) {
+      setSnackbar({
+        visible: true,
+        message: 'Thao tác thất bại. Vui lòng thử lại.',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleCancelDialog = () => {
+    setDialog({ ...dialog, visible: false });
   };
 
   const formatCurrency = (value: number) => {
@@ -169,7 +255,7 @@ export default function ContractList({ contracts, onView, onUpdate, onDelete, on
                 <View style={styles.actionDivider} />
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: COLORS.white }]}
-                  onPress={() => onDelete && onDelete(item.id)}
+                  onPress={() => showDeleteConfirm(item.id, item.contractNumber)}
                 >
                   <MaterialCommunityIcons name="delete-outline" size={18} color={COLORS.error} />
                   <Text style={[styles.actionText, { color: COLORS.error }]}>Xóa</Text>
@@ -177,7 +263,7 @@ export default function ContractList({ contracts, onView, onUpdate, onDelete, on
                 <View style={styles.actionDivider} />
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: COLORS.success + '10' }]}
-                  onPress={() => onActivate && onActivate(item.id)}
+                  onPress={() => showActivateConfirm(item.id, item.contractNumber)}
                 >
                   <MaterialCommunityIcons name="check-circle-outline" size={18} color={COLORS.success} />
                   <Text style={[styles.actionText, { color: COLORS.success }]}>Kích hoạt</Text>
@@ -190,7 +276,7 @@ export default function ContractList({ contracts, onView, onUpdate, onDelete, on
               <>
                 <TouchableOpacity
                   style={[styles.actionButton, { backgroundColor: COLORS.white }]}
-                  onPress={() => onCancel && onCancel(item.id)}
+                  onPress={() => showCancelConfirm(item.id, item.contractNumber)}
                 >
                   <MaterialCommunityIcons name="cancel" size={18} color={COLORS.warning} />
                   <Text style={[styles.actionText, { color: COLORS.warning }]}>Hủy</Text>
@@ -222,14 +308,44 @@ export default function ContractList({ contracts, onView, onUpdate, onDelete, on
   }
 
   return (
-    <FlatList
-      data={contracts}
-      keyExtractor={(item, index) => `${item.id}-${index}`}
-      renderItem={renderItem}
-      contentContainerStyle={styles.listContent}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      showsVerticalScrollIndicator={false}
-    />
+    <>
+      <FlatList
+        data={contracts}
+        keyExtractor={(item, index) => `${item.id}-${index}`}
+        renderItem={renderItem}
+        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        showsVerticalScrollIndicator={false}
+      />
+      
+      <DialogNotification
+        visible={dialog.visible}
+        type={dialog.type}
+        title={dialog.title}
+        message={dialog.message}
+        actions={[
+          {
+            text: 'Hủy',
+            onPress: handleCancelDialog,
+            style: 'cancel',
+          },
+          {
+            text: dialog.action === 'delete' ? 'Xóa' : 
+                  dialog.action === 'activate' ? 'Kích hoạt' : 'Hủy hợp đồng',
+            onPress: handleConfirmAction,
+            style: dialog.action === 'delete' ? 'destructive' : 'default',
+          },
+        ]}
+        onDismiss={handleCancelDialog}
+      />
+      
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
+      />
+    </>
   );
 }
 

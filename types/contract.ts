@@ -46,39 +46,39 @@ export interface ContractTerm {
   note: string;
   status: TermStatus;
   paymentDate: string | null;
-  dueDate: string;
+  dueDate: string | null;
   amount: number;
 }
 
-export interface ContractProduct {
+export interface ContractVariant {
   id: string;
   createdAt: string;
   updatedAt: string;
   sku: string;
+  name: string;
   model: string;
   partNumber: string;
-  serialNumber: string;
-  name: string;
+  attributes: Record<string, any>;
   unit: string;
-  minStock: number;
-  description: string;
+  standardCost: number;
+  lastPurchaseCost: number;
   active: boolean;
-  type: string;
-  costPrice: number;
-  sellPrice: number;
 }
 
 export interface ContractItem {
   id: string;
   createdAt: string;
   updatedAt: string;
-  product: ContractProduct;
+  variant: ContractVariant;
+  taxRate: number;
+  taxAmount: number;
+  discountRate: number;
+  discountAmount: number;
   quantity: number;
-  note: string;
   unitPrice: number;
+  subTotal: number;
   totalPrice: number;
-  tax: number;
-  discount: number;
+  note: string;
 }
 
 export interface Contract {
@@ -91,6 +91,8 @@ export interface Contract {
   items: ContractItem[];
   title: string;
   contractNumber: string;
+  description: string | null;
+  note: string | null;
   paymentTermDays: number;
   debtRecognitionMode: DebtRecognitionMode;
   contractType: ContractType;

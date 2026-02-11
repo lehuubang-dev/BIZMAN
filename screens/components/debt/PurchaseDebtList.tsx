@@ -161,7 +161,7 @@ export default function PurchaseDebtList({ onViewDetail }: PurchaseDebtListProps
               <View style={styles.debtInfo}>
                 <MaterialCommunityIcons name="receipt" size={20} color={COLORS.primary} />
                 <Text style={styles.orderNumber}>
-                  {item.purchaseOrder?.orderNumber || 'N/A'}
+                  {item.goodsReceipt?.receiptCode || 'N/A'}
                 </Text>
               </View>
               <MaterialCommunityIcons
@@ -179,7 +179,7 @@ export default function PurchaseDebtList({ onViewDetail }: PurchaseDebtListProps
                 </Text>
               </View>
               <Text style={styles.dueDate}>
-                Hạn: {formatDate(item.dueDate)}
+                Hạn: {item.dueDate ? formatDate(item.dueDate) : 'Chưa có hạn'}
               </Text>
             </View>
 

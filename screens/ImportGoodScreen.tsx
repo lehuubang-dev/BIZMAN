@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ImportGoodList, ImportGoodDetail, ImportGoodCreate } from './components/importGood';
@@ -21,12 +22,25 @@ const COLORS = {
   gray400: '#9CA3AF',
   gray600: '#4B5563',
   gray800: '#1F2937',
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  purple: '#9333EA',
 };
+
+// Status filter configuration for purchase orders
+const statusFilters = [
+  { key: 'ALL', label: 'Tất cả', icon: 'clipboard-list', color: COLORS.primary },
+  { key: 'DRAFT', label: 'Nháp', icon: 'pencil', color: COLORS.gray600 },
+  { key: 'APPROVED', label: 'Đã duyệt ', icon: 'check-circle', color: COLORS.success },
+  { key: 'CANCELLED', label: 'Đã hủy', icon: 'cancel', color: COLORS.error },
+];
 
 export default function ImportGoodScreen() {
   const [orders, setOrders] = useState<PurchaseOrderListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [showDetail, setShowDetail] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
@@ -47,13 +61,20 @@ export default function ImportGoodScreen() {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [searchKeyword]);
+  }, [searchKeyword, selectedStatus]);
 
   const loadOrders = async () => {
     setLoading(true);
     try {
-      console.log('Loading purchase orders...');
-      const data = await purchaseOrderService.getPurchaseOrders();
+      console.log('Loading purchase orders with status:', selectedStatus);
+      let data: PurchaseOrderListItem[];
+      
+      if (selectedStatus === 'ALL') {
+        data = await purchaseOrderService.getPurchaseOrders();
+      } else {
+        data = await purchaseOrderService.getPurchaseOrdersByStatus(selectedStatus);
+      }
+      
       console.log('Loaded orders count:', data.length);
       // API already returns data sorted by orderDate descending
       console.log('Newest order:', data[0]?.orderNumber);
@@ -77,7 +98,15 @@ export default function ImportGoodScreen() {
       console.log('Searching orders with keyword:', searchKeyword);
       const data = await purchaseOrderService.searchPurchaseOrders(searchKeyword);
       console.log('Search results count:', data.length);
-      setOrders(data);
+      
+      // Filter by status if not ALL
+      let filteredData = data;
+      if (selectedStatus !== 'ALL') {
+        filteredData = data.filter(order => order.orderStatus === selectedStatus);
+        console.log('Filtered by status', selectedStatus, ':', filteredData.length);
+      }
+      
+      setOrders(filteredData);
     } catch (error) {
       console.error('Search error:', error);
       Alert.alert('Lỗi', 'Không thể tìm kiếm đơn hàng');
@@ -133,9 +162,19 @@ export default function ImportGoodScreen() {
   const handleCreate = async () => {
     console.log('handleCreate called - refreshing order list...');
     setShowCreate(false);
+    // Reset to show all orders to see the newly created one
+    setSelectedStatus('ALL');
     await loadOrders();
     // Note: orders state will be updated by loadOrders, but the log here shows old value
     // The actual updated count is logged in loadOrders itself
+  };
+
+  const handleStatusChange = (status: string) => {
+    setSelectedStatus(status);
+    // Reset search when changing status
+    if (searchKeyword.trim()) {
+      setSearchKeyword('');
+    }
   };
 
 
@@ -169,6 +208,41 @@ export default function ImportGoodScreen() {
           {loading && searchKeyword.length > 0 && (
             <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 8 }} />
           )}
+        </View>
+        
+        {/* Status Filter */}
+        <View style={styles.filterContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+          >
+            {statusFilters.map((filter) => {
+              const isSelected = selectedStatus === filter.key;
+              return (
+                <TouchableOpacity
+                  key={filter.key}
+                  style={[
+                    styles.filterChip,
+                    isSelected && { backgroundColor: filter.color + '15', borderColor: filter.color }
+                  ]}
+                  onPress={() => handleStatusChange(filter.key)}
+                >
+                  <MaterialCommunityIcons 
+                    name={filter.icon as any} 
+                    size={16} 
+                    color={isSelected ? filter.color : COLORS.gray600} 
+                  />
+                  <Text style={[
+                    styles.filterText,
+                    isSelected && { color: filter.color, fontWeight: '600' }
+                  ]}>
+                    {filter.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       </View>
 
@@ -216,7 +290,9 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     backgroundColor: COLORS.white,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray200,
   },
@@ -227,6 +303,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    marginBottom: 12,
   },
   searchInput: {
     flex: 1,
@@ -235,5 +312,28 @@ const styles = StyleSheet.create({
     color: COLORS.gray800,
     minHeight: 40,
     paddingVertical: 8,
+  },
+  filterContainer: {
+    marginBottom: 4,
+  },
+  filterScroll: {
+    paddingHorizontal: 0,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: COLORS.gray50,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    marginRight: 8,
+  },
+  filterText: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    width: "auto",
   },
 });

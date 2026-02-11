@@ -38,6 +38,39 @@ class PurchaseOrderService {
   }
 
   /**
+   * Get purchase orders by status
+   */
+  async getPurchaseOrdersByStatus(status: string, page: number = 0, size: number = 100): Promise<PurchaseOrderListItem[]> {
+    try {
+      const response = await apiClient.get<any>(
+        `/api/v1/purchase-orders/get-order-by-status?status=${status}&page=${page}&size=${size}&sort=createdAt,desc`
+      );
+      console.log('Purchase Orders by status API Response:', response);
+      
+      // Handle paginated response: { data: { content: [...] } }
+      if (response?.data?.content && Array.isArray(response.data.content)) {
+        return response.data.content;
+      }
+      
+      // Handle direct array in data: { data: [...] }
+      if (response?.data && Array.isArray(response.data)) {
+        return response.data;
+      }
+      
+      // Handle direct array response: [...]
+      if (Array.isArray(response)) {
+        return response;
+      }
+      
+      console.warn('Unexpected purchase orders by status response format:', response);
+      return [];
+    } catch (error: any) {
+      console.error('Error fetching purchase orders by status:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get purchase order by ID
    */
   async getPurchaseOrderById(purchaseOrderId: string): Promise<PurchaseOrder | null> {
@@ -60,26 +93,26 @@ class PurchaseOrderService {
   /**
    * Get purchase orders by status
    */
-  async getPurchaseOrdersByStatus(status: string): Promise<PurchaseOrderListItem[]> {
-    try {
-      const response = await apiClient.get<any>(
-        `/api/v1/purchase-orders/get-order-by-status?status=${status}`
-      );
+  // async getPurchaseOrdersByStatus(status: string): Promise<PurchaseOrderListItem[]> {
+  //   try {
+  //     const response = await apiClient.get<any>(
+  //       `/api/v1/purchase-orders/get-order-by-status?status=${status}`
+  //     );
       
-      if (response?.data?.content && Array.isArray(response.data.content)) {
-        return response.data.content;
-      }
+  //     if (response?.data?.content && Array.isArray(response.data.content)) {
+  //       return response.data.content;
+  //     }
       
-      if (response?.data && Array.isArray(response.data)) {
-        return response.data;
-      }
+  //     if (response?.data && Array.isArray(response.data)) {
+  //       return response.data;
+  //     }
       
-      return [];
-    } catch (error) {
-      console.error('Error fetching purchase orders by status:', error);
-      throw error;
-    }
-  }
+  //     return [];
+  //   } catch (error) {
+  //     console.error('Error fetching purchase orders by status:', error);
+  //     throw error;
+  //   }
+  // }
 
   /**
    * Create a new purchase order

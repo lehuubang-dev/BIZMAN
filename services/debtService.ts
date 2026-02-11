@@ -13,21 +13,31 @@ class DebtService {
   async getPurchaseDebts(): Promise<PurchaseDebtListItem[]> {
     try {
       const response = await apiClient.get<any>(
-        '/api/v1/purchase-debts/get-purchase-debts?size=100'
+        '/api/v1/purchase-debts/get-purchase-debts?page=0&size=100&sort=createdAt,desc&sort=id,asc'
       );
       console.log('Purchase Debts API Response:', response);
       
-      // Handle paginated response: { data: { content: [...] } }
+      // Handle response with success wrapper: { success: true, code: "SUCCESS", message: "...", data: {...} }
+      if (response?.success && response?.data) {
+        // Handle paginated response: { data: { content: [...] } }
+        if (response.data?.content && Array.isArray(response.data.content)) {
+          return response.data.content;
+        }
+        // Handle direct array in data: { data: [...] }
+        if (Array.isArray(response.data)) {
+          return response.data;
+        }
+      }
+      
+      // Fallback: Handle direct response without wrapper
       if (response?.data?.content && Array.isArray(response.data.content)) {
         return response.data.content;
       }
       
-      // Handle direct array in data: { data: [...] }
       if (response?.data && Array.isArray(response.data)) {
         return response.data;
       }
       
-      // Handle direct array response: [...]
       if (Array.isArray(response)) {
         return response;
       }
@@ -50,6 +60,12 @@ class DebtService {
       );
       console.log('Purchase Debt Detail API Response:', response);
       
+      // Handle response with success wrapper
+      if (response?.success && response?.data) {
+        return response.data;
+      }
+      
+      // Fallback: Handle direct response without wrapper
       if (response?.data) {
         return response.data;
       }
@@ -71,12 +87,23 @@ class DebtService {
       );
       console.log('Search Purchase Debts API Response:', response);
       
-      // Handle paginated response
+      // Handle response with success wrapper
+      if (response?.success && response?.data) {
+        // Handle paginated response
+        if (response.data?.content && Array.isArray(response.data.content)) {
+          return response.data.content;
+        }
+        // Handle direct array
+        if (Array.isArray(response.data)) {
+          return response.data;
+        }
+      }
+      
+      // Fallback: Handle response without wrapper
       if (response?.data?.content && Array.isArray(response.data.content)) {
         return response.data.content;
       }
       
-      // Handle direct array
       if (response?.data && Array.isArray(response.data)) {
         return response.data;
       }

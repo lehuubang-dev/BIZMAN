@@ -163,37 +163,44 @@ export default function PurchaseDebtDetail({
             </View>
           </View>
 
-          {/* Purchase Order Info */}
-          {debt.purchaseOrder && (
+          {/* Goods Receipt Info */}
+          {debt.goodsReceipt && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Thông tin đơn hàng</Text>
+              <Text style={styles.sectionTitle}>Thông tin phiếu nhập</Text>
               <View style={styles.infoGrid}>
                 <InfoRow 
                   icon="file-document" 
-                  label="Mã đơn hàng" 
-                  value={debt.purchaseOrder.orderNumber} 
+                  label="Mã phiếu nhập" 
+                  value={debt.goodsReceipt.receiptCode} 
                 />
                 <InfoRow 
                   icon="calendar" 
-                  label="Ngày đặt" 
-                  value={formatDate(debt.purchaseOrder.orderDate)} 
+                  label="Ngày nhập" 
+                  value={formatDate(debt.goodsReceipt.receiptDate)} 
                 />
                 <InfoRow 
                   icon="information-outline" 
-                  label="Trạng thái ĐH" 
-                  value={debt.purchaseOrder.orderStatus} 
+                  label="Trạng thái" 
+                  value={debt.goodsReceipt.status} 
                 />
                 <InfoRow 
                   icon="cash-multiple" 
-                  label="Tổng đơn hàng" 
-                  value={`${formatCurrency(debt.purchaseOrder.totalAmount)} đ`} 
+                  label="Tổng phiếu nhập" 
+                  value={`${formatCurrency(debt.goodsReceipt.totalAmount || debt.goodsReceipt.subTotal)} đ`} 
                   valueColor={COLORS.primary}
                 />
-                {debt.purchaseOrder.note && (
+                {debt.goodsReceipt.description && (
+                  <InfoRow 
+                    icon="text" 
+                    label="Mô tả" 
+                    value={debt.goodsReceipt.description} 
+                  />
+                )}
+                {debt.goodsReceipt.note && (
                   <InfoRow 
                     icon="note-text" 
-                    label="Ghi chú ĐH" 
-                    value={debt.purchaseOrder.note} 
+                    label="Ghi chú" 
+                    value={debt.goodsReceipt.note} 
                   />
                 )}
               </View>
@@ -269,12 +276,21 @@ export default function PurchaseDebtDetail({
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Thông tin công nợ</Text>
             <View style={styles.infoGrid}>
-              <InfoRow 
-                icon="calendar-clock" 
-                label="Hạn thanh toán" 
-                value={formatDate(debt.dueDate)} 
-                valueColor={COLORS.error}
-              />
+              {debt.dueDate ? (
+                <InfoRow 
+                  icon="calendar-clock" 
+                  label="Hạn thanh toán" 
+                  value={formatDate(debt.dueDate)} 
+                  valueColor={COLORS.error}
+                />
+              ) : (
+                <InfoRow 
+                  icon="calendar-clock" 
+                  label="Hạn thanh toán" 
+                  value="Chưa có hạn thanh toán" 
+                  valueColor={COLORS.gray600}
+                />
+              )}
               <InfoRow 
                 icon="cash" 
                 label="Tổng nợ gốc" 

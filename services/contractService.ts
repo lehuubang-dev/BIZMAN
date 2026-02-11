@@ -7,7 +7,9 @@ class ContractService {
    */
   async getContracts(): Promise<ContractListItem[]> {
     try {
-      const response = await apiClient.get<any>('/api/v1/contracts/get-contracts');
+      const response = await apiClient.get<any>(
+        '/api/v1/contracts/get-contracts?page=0&size=100&sort=createdAt,desc'
+      );
       console.log('Contracts API Response:', response);
       
       // Handle paginated response: { data: { content: [...] } }
@@ -58,12 +60,44 @@ class ContractService {
    */
   async createContract(data: any): Promise<any> {
     try {
-      console.log('Creating contract:', data);
+      console.log('📋 Creating contract with payload:', JSON.stringify(data, null, 2));
+      
+      // Log key validation points
+      console.log('🔍 Validation checks:');
+      console.log('  - Title:', data.title ? '✅' : '❌', data.title);
+      console.log('  - Supplier ID:', data.supplierId ? '✅' : '❌', data.supplierId);
+      console.log('  - Items count:', data.items?.length || 0);
+      console.log('  - Total value:', data.totalValue);
+      console.log('  - Payment term days:', data.paymentTermDays);
+      
+      if (data.items?.length > 0) {
+        data.items.forEach((item: any, index: number) => {
+          console.log(`  - Item ${index + 1}:`, {
+            variantId: item.variantId ? '✅' : '❌',
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice
+          });
+        });
+      }
+      
       const response = await apiClient.post<any>('/api/v1/contracts/create-contract', data);
-      console.log('Create contract response:', response);
+      console.log('✅ Create contract success response:', response);
       return response;
     } catch (error: any) {
-      console.error('Error creating contract:', error);
+      console.error('❌ Error creating contract:', {
+        status: error?.status,
+        code: error?.code,
+        message: error?.message,
+        response: error?.response?.data,
+        url: error?.config?.url,
+      });
+      
+      // Enhanced error details
+      if (error?.response?.data) {
+        console.error('📋 Full error response:', JSON.stringify(error.response.data, null, 2));
+      }
+      
       throw error;
     }
   }

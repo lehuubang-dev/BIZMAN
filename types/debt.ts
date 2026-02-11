@@ -29,19 +29,21 @@ export interface DebtSupplier {
   maxDebt: number;
 }
 
-// Purchase Order information in debt
-export interface DebtPurchaseOrder {
+// Goods Receipt information in debt
+export interface DebtGoodsReceipt {
   id: string;
   createdAt: string;
   updatedAt: string;
-  orderNumber: string;
-  description?: string | null;
-  note?: string | null;
-  orderStatus: string;
-  orderDate: string;
+  receiptCode: string;
+  description: string;
+  note: string;
+  status: string;
+  receiptDate: string;
   subTotal: number;
-  taxAmount: number;
-  totalAmount: number;
+  taxAmount: number | null;
+  discountAmount: number;
+  fee: number;
+  totalAmount: number | null;
 }
 
 // Full Purchase Debt detail
@@ -49,12 +51,12 @@ export interface PurchaseDebt {
   id: string;
   createdAt: string;
   updatedAt: string;
-  purchaseOrder: DebtPurchaseOrder;
+  goodsReceipt: DebtGoodsReceipt;
   supplier: DebtSupplier;
   description: string;
   note?: string | null;
   status: DebtStatus;
-  dueDate: string;
+  dueDate: string | null;
   originalAmount: number;
   remainingAmount: number;
   paidAmount: number;
@@ -65,12 +67,12 @@ export interface PurchaseDebtListItem {
   id: string;
   createdAt: string;
   updatedAt: string;
-  purchaseOrder: DebtPurchaseOrder;
+  goodsReceipt: DebtGoodsReceipt;
   supplier: DebtSupplier;
   description: string;
   note?: string | null;
   status: DebtStatus;
-  dueDate: string;
+  dueDate: string | null;
   originalAmount: number;
   remainingAmount: number;
   paidAmount: number;

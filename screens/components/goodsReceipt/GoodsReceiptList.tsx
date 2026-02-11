@@ -29,6 +29,7 @@ interface GoodsReceiptListProps {
   onView: (receiptId: string) => void;
   onEdit: (receiptId: string) => void;
   onApprove: (receiptId: string, receiptCode: string) => void;
+  onDelete: (receiptId: string, receiptCode: string) => void;
   onCreate: () => void;
 }
 
@@ -36,13 +37,37 @@ export default function GoodsReceiptList({
   receipts, 
   onView, 
   onEdit,
-  onApprove, 
+  onApprove,
+  onDelete, 
   onCreate 
 }: GoodsReceiptListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handleToggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
+  };
+
+  const calculateTotalAmount = (item: GoodsReceiptListItem) => {
+    // Luôn tính toán lại từ các thành phần để đảm bảo nhất quán với form tạo
+    const subTotal = item.subTotal || 0;
+    const taxAmount = item.taxAmount || 0; 
+    const discountAmount = item.discountAmount || 0;
+    const fee = item.fee || 0;
+    
+    const calculatedTotal = subTotal + taxAmount - discountAmount + fee;
+    
+    // Debug log để kiểm tra và so sánh với API totalAmount
+    console.log(`Receipt ${item.receiptCode} calculation:`, {
+      subTotal,
+      taxAmount, 
+      discountAmount,
+      fee,
+      calculatedTotal,
+      apiTotalAmount: item.totalAmount,
+      isMatching: item.totalAmount ? (Math.abs(calculatedTotal - item.totalAmount) < 1) : 'N/A'
+    });
+    
+    return calculatedTotal;
   };
 
   const formatCurrency = (value: number) => {
@@ -120,26 +145,39 @@ export default function GoodsReceiptList({
               </View>
             )}
 
-            {item.supplier && (
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="handshake-outline" size={14} color={COLORS.gray600} />
-                <Text style={styles.infoText} numberOfLines={1}>{item.supplier.name}</Text>
-              </View>
-            )}
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="handshake-outline" size={14} color={COLORS.gray600} />
+              <Text style={styles.infoText} numberOfLines={1}>{item.supplier.name}</Text>
+            </View>
 
-            {item.warehouse && (
-              <View style={styles.infoRow}>
-                <MaterialCommunityIcons name="warehouse" size={14} color={COLORS.gray600} />
-                <Text style={styles.infoText} numberOfLines={1}>{item.warehouse.name}</Text>
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="warehouse" size={14} color={COLORS.gray600} />
+              <Text style={styles.infoText} numberOfLines={1}>{item.warehouse.name}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="package-variant" size={14} color={COLORS.gray600} />
+              <Text style={styles.infoText}>
+                {item.products.length} sản phẩm ({item.products.reduce((total, p) => total + p.quantity, 0)} chiếc)
+              </Text>
+            </View>
+
+            {item.note && (
+              <View style={styles.noteContainer}>
+                <MaterialCommunityIcons name="truck-fast-outline" size={14} color={COLORS.gray600} style={{ marginTop: 4 }} />
+                <Text style={[styles.infoText, styles.noteText]} numberOfLines={2}>
+                  {item.note}
+                </Text>
               </View>
             )}
 
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Tổng tiền:</Text>
-              <Text style={styles.priceValue}>{formatCurrency(item.subTotal)}</Text>
+              <Text style={styles.priceLabel}>Tổng cộng:</Text>
+              <Text style={styles.priceValue}>{formatCurrency(calculateTotalAmount(item))}</Text>
             </View>
           </View>
         </TouchableOpacity>
+        {/* Menu thao tác */}
 
         {isExpanded && (
           <View style={styles.actions}>
@@ -159,6 +197,14 @@ export default function GoodsReceiptList({
                 >
                   <MaterialCommunityIcons name="check-circle-outline" size={18} color={COLORS.success} />
                   <Text style={[styles.actionText, { color: COLORS.success }]}>Duyệt</Text>
+                </TouchableOpacity>
+                <View style={styles.actionDivider} />
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: COLORS.error + '10' }]}
+                  onPress={() => onDelete(item.id, item.receiptCode)}
+                >
+                  <MaterialCommunityIcons name="delete-outline" size={18} color={COLORS.error} />
+                  <Text style={[styles.actionText, { color: COLORS.error }]}>Xóa</Text>
                 </TouchableOpacity>
                 <View style={styles.actionDivider} />
               </>
@@ -277,6 +323,7 @@ const styles = StyleSheet.create({
   priceLabel: {
     fontSize: 13,
     color: COLORS.gray600,
+    width: '40%',
   },
   priceValue: {
     fontSize: 16,
@@ -306,6 +353,15 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 12,
+  },
+  noteText: {
+    fontStyle: 'italic',
+  },
+  noteContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    paddingTop: 4,
   },
   emptyContainer: {
     flex: 1,

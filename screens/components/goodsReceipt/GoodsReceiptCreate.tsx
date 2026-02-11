@@ -9,10 +9,12 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import * as DocumentPicker from 'expo-document-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { goodsReceiptService } from '../../../services/goodsReceiptService';
 import { purchaseOrderService } from '../../../services/purchaseOrderService';
 import { 
@@ -21,6 +23,7 @@ import {
   GoodsReceiptStatus,
   GoodsReceipt
 } from '../../../types/goodsReceipt';
+import DialogNotification from '../common/DialogNotification';
 
 const COLORS = {
   primary: '#2196F3',
@@ -28,8 +31,10 @@ const COLORS = {
   gray50: '#F9FAFB',
   gray100: '#F3F4F6',
   gray200: '#E5E7EB',
+  gray300: '#D1D5DB',
   gray400: '#9CA3AF',
   gray600: '#4B5563',
+  gray700: '#374151',
   gray800: '#1F2937',
   success: '#10B981',
   error: '#EF4444',
@@ -40,19 +45,24 @@ interface GoodsReceiptCreateProps {
   visible: boolean;
   receiptId: string | null; // For editing
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (receiptCode?: string) => void;
 }
 
 interface ProductItem {
-  productId: string;
+  variantId: string;
   name?: string;
+  sku?: string;
   quantity: number;
   unitPrice: number;
+  subTotal: number;
   totalPrice: number;
-  location: string;
-  stack: number;
-  fee: number;
+  taxRate: number;
+  taxAmount: number;
+  discountRate: number;
+  discountAmount: number;
   note?: string;
+  manufactureDate?: string;
+  expiryDate?: string;
 }
 
 export default function GoodsReceiptCreate({ 
@@ -78,23 +88,46 @@ export default function GoodsReceiptCreate({
   const [purchaseOrderId, setPurchaseOrderId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
   const [supplierId, setSupplierId] = useState('');
-  const [receiptDate, setReceiptDate] = useState(new Date().toISOString());
+  const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split('T')[0]); // Format: YYYY-MM-DD
   const [description, setDescription] = useState('');
   const [note, setNote] = useState('');
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [documents, setDocuments] = useState<string[]>([]);
   const [status, setStatus] = useState<GoodsReceiptStatus>('DRAFT');
+  const [subTotal, setSubTotal] = useState(0);
+  const [taxAmount, setTaxAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [fee, setFee] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0);
   
   // Product form
   const [showProductForm, setShowProductForm] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<ProductItem>({
-    productId: '',
+    variantId: '',
     quantity: 1,
     unitPrice: 0,
+    subTotal: 0,
     totalPrice: 0,
-    location: '',
-    stack: 1,
-    fee: 0,
+    taxRate: 0,
+    taxAmount: 0,
+    discountRate: 0,
+    discountAmount: 0,
+    note: '',
+    manufactureDate: '',
+    expiryDate: '',
+  });
+  
+  // Date picker states
+  const [showReceiptDatePicker, setShowReceiptDatePicker] = useState(false);
+  const [showManufactureDatePicker, setShowManufactureDatePicker] = useState(false);
+  const [showExpiryDatePicker, setShowExpiryDatePicker] = useState(false);
+
+  // Dialog notification states
+  const [showDialog, setShowDialog] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState({
+    type: 'success' as 'success' | 'error' | 'warning' | 'info' | 'confirm',
+    title: '',
+    message: '',
   });
 
   useEffect(() => {
@@ -105,6 +138,28 @@ export default function GoodsReceiptCreate({
       }
     }
   }, [visible, receiptId]);
+
+  // Tự động tính lại tổng tiền từ danh sách sản phẩm
+  useEffect(() => {
+    if (products.length > 0 && !purchaseOrderId) {
+      const calculatedSubTotal = products.reduce((sum, product) => sum + product.subTotal, 0);
+      const calculatedTaxAmount = products.reduce((sum, product) => sum + product.taxAmount, 0);
+      const calculatedDiscountAmount = products.reduce((sum, product) => sum + product.discountAmount, 0);
+      
+      setSubTotal(calculatedSubTotal);
+      setTaxAmount(calculatedTaxAmount);
+      setDiscountAmount(calculatedDiscountAmount);
+      
+      const newTotal = calculatedSubTotal + calculatedTaxAmount - calculatedDiscountAmount + fee;
+      setTotalAmount(newTotal);
+    } else if (products.length === 0 && !purchaseOrderId) {
+      // Reset về 0 khi không còn sản phẩm nào và không có đơn hàng
+      setSubTotal(0);
+      setTaxAmount(0);
+      setDiscountAmount(0);
+      setTotalAmount(fee);
+    }
+  }, [products, fee, purchaseOrderId]);
 
   const loadOptions = async () => {
     setLoadingOptions(true);
@@ -132,6 +187,16 @@ export default function GoodsReceiptCreate({
     if (!poId) {
       setPurchaseOrderDetail(null);
       setProductOptions(allProducts);
+      // Reset các trường thông tin khi bỏ chọn đơn hàng
+      setSupplierId('');
+      setWarehouseId('');
+      setSubTotal(0);
+      setTaxAmount(0);
+      setDiscountAmount(0);
+      setDescription('');
+      setNote('');
+      setTotalAmount(0);
+      setDocuments([]);
       return;
     }
     
@@ -143,19 +208,41 @@ export default function GoodsReceiptCreate({
       if (data) {
         setPurchaseOrderDetail(data);
         
-        // Auto-fill supplier (không thể thay đổi)
-        if (data.supplier?.id) {
-          setSupplierId(data.supplier.id);
+        // Tự động điền thông tin từ đơn hàng
+        setSupplierId(data.supplier?.id || '');
+        setWarehouseId(data.warehouse?.id || '');
+        setSubTotal(data.subTotal || 0);
+        setTaxAmount(data.taxAmount || 0);
+        setDiscountAmount((data as any).discountAmount || 0);
+        // Lấy description và note từ purchase order
+        setDescription(data.description || '');
+        setNote(data.note || '');
+        
+        // Tính tổng tiền tự động
+        const calculatedTotal = (data.subTotal || 0) + (data.taxAmount || 0) - ((data as any).discountAmount || 0) + fee;
+        setTotalAmount(calculatedTotal);
+        
+        // Tự động lấy documents từ đơn hàng nếu có
+        if (data.documents && data.documents.length > 0) {
+          setDocuments(data.documents.map((doc: any) => doc.id));
         }
         
-        // Auto-fill warehouse (có thể thay đổi)
-        if (data.warehouse?.id) {
-          setWarehouseId(data.warehouse.id);
-        }
-        
-        // Filter products theo purchase order
+        // Lấy sản phẩm từ đơn hàng cho dropdown
         if (data.products && data.products.length > 0) {
-          setProductOptions(data.products);
+          const orderProducts = data.products.map((p: any) => ({
+            id: p.variant.id,
+            name: p.variant.name,
+            sku: p.variant.sku,
+            unit: p.variant.unit,
+            costPrice: p.unitPrice,
+            // Lưu thông tin từ đơn hàng
+            orderQuantity: p.quantity,
+            orderUnitPrice: p.unitPrice,
+            orderTaxRate: p.taxRate || 0,
+            orderDiscountRate: p.discountRate || 0,
+            orderNote: p.note || ''
+          }));
+          setProductOptions(orderProducts);
         } else {
           setProductOptions(allProducts);
         }
@@ -185,16 +272,28 @@ export default function GoodsReceiptCreate({
         setNote(data.note || '');
         setStatus(data.status);
         setProducts(data.products.map(p => ({
-          productId: p.product.id,
-          name: p.product.name,
+          variantId: p.variant.id,
+          name: p.variant.name,
+          sku: p.variant.sku,
           quantity: p.quantity,
           unitPrice: p.unitPrice,
+          subTotal: p.subTotal,
           totalPrice: p.totalPrice,
-          location: p.location,
-          stack: p.stack,
-          fee: p.fee,
+          taxRate: p.taxRate || 0,
+          taxAmount: p.taxAmount || 0,
+          discountRate: p.discountRate || 0,
+          discountAmount: p.discountAmount || 0,
           note: p.note,
+          manufactureDate: p.manufactureDate || '',
+          expiryDate: p.expiryDate || '',
         })));
+        setTaxAmount(data.taxAmount || 0);
+        setDiscountAmount(data.discountAmount || 0);
+        setSubTotal(data.subTotal || 0);
+        setTaxAmount(data.taxAmount || 0);
+        setDiscountAmount(data.discountAmount || 0);
+        setFee(data.fee || 0);
+        setTotalAmount(data.totalAmount || 0);
         // Documents would need IDs, for now just count them
         setDocuments(data.documents?.map(d => d.id) || []);
       }
@@ -209,59 +308,135 @@ export default function GoodsReceiptCreate({
     setPurchaseOrderId('');
     setWarehouseId('');
     setSupplierId('');
-    setReceiptDate(new Date().toISOString());
+    setReceiptDate(new Date().toISOString().split('T')[0]);
     setDescription('');
     setNote('');
     setProducts([]);
     setDocuments([]);
     setStatus('DRAFT');
-    console.log('Form reset - receiptDate set to:', new Date().toISOString());
+    setSubTotal(0);
+    setTaxAmount(0);
+    setDiscountAmount(0);
+    setFee(0);
+    setTotalAmount(0);
+    setPurchaseOrderDetail(null);
+    setProductOptions([]);
+    setAllProducts([]);
+    console.log('Form reset - receiptDate set to:', new Date().toISOString().split('T')[0]);
   };
 
   const calculateProductPrice = (product: ProductItem): ProductItem => {
-    const totalPrice = product.quantity * product.unitPrice;
+    const subTotal = product.quantity * product.unitPrice;
+    const taxAmount = Math.round((subTotal * product.taxRate) / 100);
+    const discountAmount = Math.round((subTotal * product.discountRate) / 100);
+    const totalPrice = subTotal + taxAmount - discountAmount;
+    
     return {
       ...product,
+      subTotal,
+      taxAmount,
+      discountAmount,
       totalPrice,
     };
   };
 
-  const calculateSubTotal = () => {
-    return products.reduce((sum, p) => sum + p.totalPrice, 0);
+  // Tính số lượng còn lại của sản phẩm
+  const getRemainingQuantity = (variantId: string): number => {
+    if (!purchaseOrderDetail) return Infinity;
+    
+    // Lấy số lượng gốc từ đơn hàng
+    const orderProduct = purchaseOrderDetail.products?.find((p: any) => p.variant.id === variantId);
+    const originalQuantity = orderProduct?.quantity || 0;
+    
+    // Tính số lượng đã thêm vào danh sách
+    const addedQuantity = products
+      .filter(p => p.variantId === variantId)
+      .reduce((sum, p) => sum + p.quantity, 0);
+    
+    return Math.max(0, originalQuantity - addedQuantity);
   };
 
-  const handleProductSelect = (productId: string) => {
-    const selectedProduct = productOptions.find(p => p.id === productId);
+  const validateQuantity = (variantId: string, inputQuantity: number): number => {
+    // Không cho phép số âm
+    if (inputQuantity < 0) return 0;
+    
+    // Kiểm tra số lượng còn lại
+    const remaining = getRemainingQuantity(variantId);
+    if (remaining === Infinity) return inputQuantity; // Không có giới hạn nếu không có đơn hàng
+    
+    return Math.min(inputQuantity, remaining);
+  };
+
+  // Format ngày thành dd/mm/yyyy cho hiển thị
+  const formatDateDisplay = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+  };
+
+  // Kiểm tra ngày hạn sử dụng phải sau ngày sản xuất
+  const validateExpiryDate = (manufactureDate: string, expiryDate: string): boolean => {
+    if (!manufactureDate || !expiryDate) return true; // Cho phép nếu một trong hai ngày không có
+    return new Date(expiryDate) > new Date(manufactureDate);
+  };
+
+  const handleProductSelect = (variantId: string) => {
+    const selectedProduct = productOptions.find(p => p.id === variantId);
     if (selectedProduct) {
-      // Nếu có purchase order detail, lấy thông tin từ đó
-      const poProduct = purchaseOrderDetail?.products?.find((p: any) => p.id === productId);
+      const remaining = getRemainingQuantity(variantId);
       
+      // Lấy thông tin từ đơn hàng đã lưu trong productOptions
       setCurrentProduct({
         ...currentProduct,
-        productId: productId,
+        variantId: variantId,
         name: selectedProduct.name,
-        quantity: poProduct?.quantity || 1,
-        unitPrice: poProduct?.unitPrice || selectedProduct.costPrice || 0,
+        sku: selectedProduct.sku,
+        quantity: Math.min(selectedProduct.orderQuantity || 1, remaining),
+        unitPrice: selectedProduct.orderUnitPrice || selectedProduct.costPrice || 0,
+        taxRate: selectedProduct.orderTaxRate || 0,
+        discountRate: selectedProduct.orderDiscountRate || 0,
+        note: selectedProduct.orderNote || '',
       });
     }
   };
 
   const handleAddProduct = () => {
-    if (!currentProduct.productId) {
-      Alert.alert('Thông báo', 'Vui lòng chọn sản phẩm');
+    if (!currentProduct.variantId) {
+      setDialogConfig({
+        type: 'warning',
+        title: 'Thông báo',
+        message: 'Vui lòng chọn sản phẩm',
+      });
+      setShowDialog(true);
+      return;
+    }
+
+    // Validate quantity if purchase order is selected
+    if (!validateQuantity(currentProduct.variantId, currentProduct.quantity)) {
+      const remaining = getRemainingQuantity(currentProduct.variantId);
+      setDialogConfig({
+        type: 'warning',
+        title: 'Thông báo',
+        message: `Số lượng vượt quá số hàng còn lại trong đơn mua hàng. Còn lại: ${remaining}`,
+      });
+      setShowDialog(true);
       return;
     }
 
     const calculatedProduct = calculateProductPrice(currentProduct);
     setProducts([...products, calculatedProduct]);
     setCurrentProduct({
-      productId: '',
+      variantId: '',
       quantity: 1,
       unitPrice: 0,
+      subTotal: 0,
       totalPrice: 0,
-      location: '',
-      stack: 1,
-      fee: 0,
+      taxRate: 0,
+      taxAmount: 0,
+      discountRate: 0,
+      discountAmount: 0,
+      manufactureDate: '',
+      expiryDate: '',
     });
     setShowProductForm(false);
   };
@@ -288,7 +463,12 @@ export default function GoodsReceiptCreate({
       }
     } catch (error: any) {
       console.error('Document upload error:', error);
-      Alert.alert('Lỗi', error.message || 'Không thể tải tài liệu lên');
+      setDialogConfig({
+        type: 'error',
+        title: 'Lỗi',
+        message: error.message || 'Không thể tải tài liệu lên',
+      });
+      setShowDialog(true);
     }
   };
 
@@ -299,45 +479,80 @@ export default function GoodsReceiptCreate({
   const handleSubmit = async () => {
     // Validation
     if (!purchaseOrderId) {
-      Alert.alert('Thông báo', 'Vui lòng chọn đơn hàng');
+      setDialogConfig({
+        type: 'warning',
+        title: 'Thông báo',
+        message: 'Vui lòng chọn đơn hàng',
+      });
+      setShowDialog(true);
       return;
     }
     if (!warehouseId) {
-      Alert.alert('Thông báo', 'Vui lòng chọn kho hàng');
+      setDialogConfig({
+        type: 'warning',
+        title: 'Thông báo',
+        message: 'Vui lòng chọn kho hàng',
+      });
+      setShowDialog(true);
       return;
     }
     if (!supplierId) {
-      Alert.alert('Thông báo', 'Vui lòng chọn nhà cung cấp');
+      setDialogConfig({
+        type: 'warning',
+        title: 'Thông báo',
+        message: 'Vui lòng chọn nhà cung cấp',
+      });
+      setShowDialog(true);
+      return;
+    }
+    if (!receiptDate) {
+      setDialogConfig({
+        type: 'warning',
+        title: 'Thông báo',
+        message: 'Vui lòng nhập ngày nhập hàng',
+      });
+      setShowDialog(true);
       return;
     }
     if (products.length === 0) {
-      Alert.alert('Thông báo', 'Vui lòng thêm ít nhất 1 sản phẩm');
+      setDialogConfig({
+        type: 'warning',
+        title: 'Thông báo',
+        message: 'Vui lòng thêm ít nhất 1 sản phẩm',
+      });
+      setShowDialog(true);
       return;
     }
 
-    const subTotal = calculateSubTotal();
-
-    const receiptData: CreateGoodsReceiptData | UpdateGoodsReceiptData = {
+    const receiptData: any = {
       ...(receiptId && { id: receiptId }),
       purchaseOrderId,
       warehouseId,
       supplierId,
       documents,
       products: products.map(p => ({
-        productId: p.productId,
+        variantId: p.variantId,
         quantity: p.quantity,
         unitPrice: p.unitPrice,
+        subTotal: p.subTotal,
         totalPrice: p.totalPrice,
-        location: p.location,
-        stack: p.stack,
-        fee: p.fee,
+        taxRate: p.taxRate,
+        taxAmount: p.taxAmount,
+        discountRate: p.discountRate,
+        discountAmount: p.discountAmount,
         ...(p.note && { note: p.note }),
+        ...(p.manufactureDate && { manufactureDate: p.manufactureDate }),
+        ...(p.expiryDate && { expiryDate: p.expiryDate }),
       })),
-      description,
-      note,
-      status,
       receiptDate,
       subTotal,
+      taxAmount,
+      discountAmount,
+      fee,
+      totalAmount,
+      ...(description && { description }),
+      ...(note && { note }),
+      status,
     };
 
     console.log('Submitting goods receipt:', JSON.stringify(receiptData, null, 2));
@@ -346,7 +561,7 @@ export default function GoodsReceiptCreate({
     try {
       let result;
       if (receiptId) {
-        result = await goodsReceiptService.updateGoodsReceipt(receiptData as UpdateGoodsReceiptData);
+        result = await goodsReceiptService.updateGoodsReceipt(receiptData);
         console.log('Goods receipt updated, result:', result);
       } else {
         result = await goodsReceiptService.createGoodsReceipt(receiptData);
@@ -355,12 +570,27 @@ export default function GoodsReceiptCreate({
       
       resetForm();
       onClose();
-      onSuccess();
+      // Pass receipt code if it's a creation (not update)
+      onSuccess(!receiptId && result?.receiptCode ? result.receiptCode : undefined);
       
-      Alert.alert('Thành công', receiptId ? 'Cập nhật phiếu nhập hàng thành công' : 'Tạo phiếu nhập hàng thành công');
+      // Show success dialog only for update operations
+      // For create operations, parent component will handle the success notification
+      if (receiptId) {
+        setDialogConfig({
+          type: 'success',
+          title: 'Thành công',
+          message: 'Cập nhật phiếu nhập hàng thành công!',
+        });
+        setShowDialog(true);
+      }
     } catch (error: any) {
       console.error('Failed to save goods receipt:', error);
-      Alert.alert('Lỗi', error.message || 'Không thể lưu phiếu nhập hàng');
+      setDialogConfig({
+        type: 'error',
+        title: 'Lỗi',
+        message: error.message || 'Không thể lưu phiếu nhập hàng',
+      });
+      setShowDialog(true);
     } finally {
       setLoading(false);
     }
@@ -369,8 +599,6 @@ export default function GoodsReceiptCreate({
   const formatCurrency = (value: number) => {
     return Math.round(value).toLocaleString('vi-VN');
   };
-
-  const subTotal = calculateSubTotal();
 
   const renderStatusRadio = (
     label: string,
@@ -483,6 +711,34 @@ export default function GoodsReceiptCreate({
             </View>
 
             <View style={styles.inputGroup}>
+              <Text style={styles.label}>Ngày nhập hàng <Text style={styles.required}>*</Text></Text>
+              <TouchableOpacity 
+                style={styles.datePickerButton}
+                onPress={() => setShowReceiptDatePicker(true)}
+              >
+                <Text style={[styles.datePickerText, !receiptDate && styles.placeholderText]}>
+                  {receiptDate ? formatDateDisplay(receiptDate) : 'Chọn ngày nhập hàng'}
+                </Text>
+                <MaterialCommunityIcons name="calendar" size={20} color={COLORS.gray600} />
+              </TouchableOpacity>
+              {showReceiptDatePicker && (
+                <DateTimePicker
+                  value={receiptDate ? new Date(receiptDate) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    setShowReceiptDatePicker(false);
+                    if (selectedDate) {
+                      setReceiptDate(selectedDate.toISOString().split('T')[0]);
+                    }
+                  }}
+                />
+              )}
+            </View>
+
+
+
+            <View style={styles.inputGroup}>
               <Text style={styles.label}>Mô tả</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
@@ -493,6 +749,9 @@ export default function GoodsReceiptCreate({
                 multiline
                 numberOfLines={3}
               />
+              {purchaseOrderId && (
+                <Text style={styles.helperText}>Có thể chỉnh sửa mô tả từ đơn hàng</Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -506,6 +765,9 @@ export default function GoodsReceiptCreate({
                 multiline
                 numberOfLines={3}
               />
+              {purchaseOrderId && (
+                <Text style={styles.helperText}>Có thể chỉnh sửa ghi chú từ đơn hàng</Text>
+              )}
             </View>
           </View>
 
@@ -537,22 +799,23 @@ export default function GoodsReceiptCreate({
             {products.map((product, index) => (
               <View key={index} style={styles.productCard}>
                 <View style={styles.productHeader}>
-                  <Text style={styles.productName}>{product.name || product.productId}</Text>
+                  <Text style={styles.productName}>{product.name || product.variantId}</Text>
                   <TouchableOpacity onPress={() => handleRemoveProduct(index)}>
                     <MaterialCommunityIcons name="delete" size={20} color={COLORS.error} />
                   </TouchableOpacity>
                 </View>
                 <View style={styles.productDetails}>
                   <Text style={styles.productDetail}>SL: {product.quantity}</Text>
-                  <Text style={styles.productDetail}>Vị trí: {product.location}</Text>
-                  <Text style={styles.productDetail}>Số lô: {product.stack}</Text>
+                  <Text style={styles.productDetail}>SKU: {product.sku || 'N/A'}</Text>
+                  <Text style={styles.productDetail}>Thuế: {product.taxRate}%</Text>
+                  <Text style={styles.productDetail}>Chiết khấu: {product.discountRate}%</Text>
                 </View>
                 <View style={styles.productDetails}>
-                  <Text style={styles.productDetail}>Đơn giá: {formatCurrency(product.unitPrice)} đ</Text>
-                  <Text style={styles.productDetail}>Phí: {formatCurrency(product.fee)} đ</Text>
+                  <Text style={styles.productDetail}>Đơn giá: {formatCurrency(product.unitPrice)} VNĐ</Text>
+                  <Text style={styles.productDetail}>Tổng phụ: {formatCurrency(product.subTotal)} VNĐ</Text>
                 </View>
                 <View style={styles.productFooter}>
-                  <Text style={styles.productTotal}>Thành tiền: {formatCurrency(product.totalPrice)} đ</Text>
+                  <Text style={styles.productTotal}>Thành tiền: {formatCurrency(product.totalPrice)} VNĐ</Text>
                 </View>
                 {product.note && (
                   <Text style={styles.productNote}>Ghi chú: {product.note}</Text>
@@ -592,13 +855,111 @@ export default function GoodsReceiptCreate({
             ))}
 
             {documents.length === 0 && (
-              <Text style={styles.emptyText}>Chưa có tài liệu</Text>
+              <Text style={styles.emptyText}>
+                {purchaseOrderId ? 'Đơn hàng chưa có tài liệu' : 'Chưa có tài liệu'}
+              </Text>
             )}
+            
+            {purchaseOrderId && documents.length > 0 && (
+              <Text style={styles.helperText}>Tài liệu từ đơn hàng được tự động thêm vào</Text>
+            )}
+          </View>
+
+          {/* Summary Section */}
+          <View style={styles.summarySection}>
+            <View style={styles.summaryHeader}>
+              <MaterialCommunityIcons name="calculator" size={24} color={COLORS.primary} />
+              <Text style={styles.summaryTitle}>Tổng tiền (VNĐ)</Text>
+            </View>
+            
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tổng phụ:</Text>
+                <TextInput
+                  style={[styles.summaryInput, purchaseOrderId && styles.summaryInputDisabled]}
+                  value={subTotal.toString()}
+                  onChangeText={(text) => {
+                    const newSubTotal = parseInt(text) || 0;
+                    setSubTotal(newSubTotal);
+                    const newTotal = newSubTotal + taxAmount - discountAmount + fee;
+                    setTotalAmount(newTotal);
+                  }}
+                  placeholder="0"
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.gray400}
+                  editable={!purchaseOrderId}
+                />
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tiền thuế:</Text>
+                <TextInput
+                  style={[styles.summaryInput, purchaseOrderId && styles.summaryInputDisabled]}
+                  value={taxAmount.toString()}
+                  onChangeText={(text) => {
+                    const newTaxAmount = parseInt(text) || 0;
+                    setTaxAmount(newTaxAmount);
+                    const newTotal = subTotal + newTaxAmount - discountAmount + fee;
+                    setTotalAmount(newTotal);
+                  }}
+                  placeholder="0"
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.gray400}
+                  editable={!purchaseOrderId}
+                />
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Giảm giá:</Text>
+                <TextInput
+                  style={[styles.summaryInput, purchaseOrderId && styles.summaryInputDisabled]}
+                  value={discountAmount.toString()}
+                  onChangeText={(text) => {
+                    const newDiscountAmount = parseInt(text) || 0;
+                    setDiscountAmount(newDiscountAmount);
+                    const newTotal = subTotal + taxAmount - newDiscountAmount + fee;
+                    setTotalAmount(newTotal);
+                  }}
+                  placeholder="0"
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.gray400}
+                  editable={!purchaseOrderId}
+                />
+              </View>
+              
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Phí khác:</Text>
+                <TextInput
+                  style={styles.summaryInput}
+                  value={fee.toString()}
+                  onChangeText={(text) => {
+                    const feeValue = parseInt(text) || 0;
+                    setFee(feeValue);
+                    const newTotal = subTotal + taxAmount - discountAmount + feeValue;
+                    setTotalAmount(newTotal);
+                  }}
+                  placeholder="0"
+                  keyboardType="numeric"
+                  placeholderTextColor={COLORS.gray400}
+                />
+              </View>
+              
+              <View style={styles.summaryDivider} />
+              
+              <View style={styles.totalSummaryRow}>
+                <Text style={styles.totalSummaryLabel}>Tổng cộng:</Text>
+                <Text style={styles.totalSummaryValue}>{formatCurrency(totalAmount)} VNĐ</Text>
+              </View>
+              
+              {purchaseOrderId && (
+                <Text style={styles.summaryHelperText}>* Các giá trị tự động từ đơn hàng</Text>
+              )}
+            </View>
           </View>
 
           {/* Product Form Modal */}
           {showProductForm && (
-            <Modal visible={showProductForm} transparent animationType="fade">
+            <Modal visible={showProductForm} transparent animationType="slide">
               <View style={styles.productFormOverlay}>
                 <View style={styles.productForm}>
                   <View style={styles.productFormHeader}>
@@ -613,7 +974,7 @@ export default function GoodsReceiptCreate({
                       <Text style={styles.label}>Sản phẩm <Text style={styles.required}>*</Text></Text>
                       <View style={styles.pickerContainer}>
                         <Picker
-                          selectedValue={currentProduct.productId}
+                          selectedValue={currentProduct.variantId}
                           onValueChange={handleProductSelect}
                           style={styles.picker}
                         >
@@ -630,11 +991,20 @@ export default function GoodsReceiptCreate({
                       <TextInput
                         style={styles.input}
                         value={currentProduct.quantity.toString()}
-                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, quantity: parseInt(text) || 0 })}
+                        onChangeText={(text) => {
+                          const inputValue = parseInt(text) || 0;
+                          const validatedQuantity = validateQuantity(currentProduct.variantId, inputValue);
+                          setCurrentProduct({ ...currentProduct, quantity: validatedQuantity });
+                        }}
                         placeholder="Số lượng"
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
                       />
+                      {currentProduct.variantId && purchaseOrderDetail && (
+                        <Text style={styles.helperText}>
+                          Còn lại: {getRemainingQuantity(currentProduct.variantId)} / {purchaseOrderDetail.products?.find((p: any) => p.variant.id === currentProduct.variantId)?.quantity || 0}
+                        </Text>
+                      )}
                     </View>
 
                     <View style={styles.inputGroup}>
@@ -642,7 +1012,7 @@ export default function GoodsReceiptCreate({
                       <TextInput
                         style={styles.input}
                         value={currentProduct.unitPrice.toString()}
-                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, unitPrice: parseFloat(text) || 0 })}
+                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, unitPrice: parseInt(text) || 0 })}
                         placeholder="Đơn giá"
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
@@ -650,38 +1020,116 @@ export default function GoodsReceiptCreate({
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Vị trí:</Text>
+                      <Text style={styles.label}>Thuế suất (%):</Text>
                       <TextInput
                         style={styles.input}
-                        value={currentProduct.location}
-                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, location: text })}
-                        placeholder="ví dụ: A-12-05"
-                        placeholderTextColor={COLORS.gray400}
-                      />
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Số lô <Text style={styles.required}>*</Text></Text>
-                      <TextInput
-                        style={styles.input}
-                        value={currentProduct.stack.toString()}
-                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, stack: parseInt(text) || 1 })}
-                        placeholder="Số lô"
+                        value={currentProduct.taxRate.toString()}
+                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, taxRate: parseInt(text) || 0 })}
+                        placeholder="Ví dụ: 10"
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
                       />
                     </View>
 
                     <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Phí</Text>
+                      <Text style={styles.label}>Chiết khấu (%):</Text>
                       <TextInput
                         style={styles.input}
-                        value={currentProduct.fee.toString()}
-                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, fee: parseFloat(text) || 0 })}
-                        placeholder="Phí"
+                        value={currentProduct.discountRate.toString()}
+                        onChangeText={(text) => setCurrentProduct({ ...currentProduct, discountRate: parseInt(text) || 0 })}
+                        placeholder="Ví dụ: 5"
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
                       />
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Ngày sản xuất:</Text>
+                      <TouchableOpacity 
+                        style={styles.datePickerButton}
+                        onPress={() => setShowManufactureDatePicker(true)}
+                      >
+                        <Text style={[styles.datePickerText, !currentProduct.manufactureDate && styles.placeholderText]}>
+                          {currentProduct.manufactureDate ? formatDateDisplay(currentProduct.manufactureDate) : 'Chọn ngày sản xuất'}
+                        </Text>
+                        <MaterialCommunityIcons name="calendar" size={20} color={COLORS.gray600} />
+                      </TouchableOpacity>
+                      {showManufactureDatePicker && (
+                        <DateTimePicker
+                          value={currentProduct.manufactureDate ? new Date(currentProduct.manufactureDate) : new Date()}
+                          mode="date"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          onChange={(event, selectedDate) => {
+                            setShowManufactureDatePicker(false);
+                            if (selectedDate) {
+                              const newManufactureDate = selectedDate.toISOString().split('T')[0];
+                              setCurrentProduct({ 
+                                ...currentProduct, 
+                                manufactureDate: newManufactureDate 
+                              });
+                              
+                              // Kiểm tra và reset ngày hạn sử dụng nếu không hợp lệ
+                              if (currentProduct.expiryDate && !validateExpiryDate(newManufactureDate, currentProduct.expiryDate)) {
+                                setDialogConfig({
+                                  type: 'info',
+                                  title: 'Thông báo',
+                                  message: 'Ngày hạn sử dụng đã được reset vì phải sau ngày sản xuất',
+                                });
+                                setShowDialog(true);
+                                setCurrentProduct(prev => ({ ...prev, expiryDate: '' }));
+                              }
+                            }
+                          }}
+                        />
+                      )}
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Hạn sử dụng:</Text>
+                      <TouchableOpacity 
+                        style={styles.datePickerButton}
+                        onPress={() => setShowExpiryDatePicker(true)}
+                      >
+                        <Text style={[styles.datePickerText, !currentProduct.expiryDate && styles.placeholderText]}>
+                          {currentProduct.expiryDate ? formatDateDisplay(currentProduct.expiryDate) : 'Chọn hạn sử dụng'}
+                        </Text>
+                        <MaterialCommunityIcons name="calendar" size={20} color={COLORS.gray600} />
+                      </TouchableOpacity>
+                      {currentProduct.manufactureDate && (
+                        <Text style={styles.helperText}>
+                          Phải sau ngày sản xuất: {formatDateDisplay(currentProduct.manufactureDate)}
+                        </Text>
+                      )}
+                      {showExpiryDatePicker && (
+                        <DateTimePicker
+                          value={currentProduct.expiryDate ? new Date(currentProduct.expiryDate) : new Date()}
+                          mode="date"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          minimumDate={currentProduct.manufactureDate ? new Date(new Date(currentProduct.manufactureDate).getTime() + 24 * 60 * 60 * 1000) : undefined}
+                          onChange={(event, selectedDate) => {
+                            setShowExpiryDatePicker(false);
+                            if (selectedDate) {
+                              const newExpiryDate = selectedDate.toISOString().split('T')[0];
+                              
+                              // Kiểm tra validation
+                              if (currentProduct.manufactureDate && !validateExpiryDate(currentProduct.manufactureDate, newExpiryDate)) {
+                                setDialogConfig({
+                                  type: 'error',
+                                  title: 'Lỗi',
+                                  message: 'Hạn sử dụng phải sau ngày sản xuất',
+                                });
+                                setShowDialog(true);
+                                return;
+                              }
+                              
+                              setCurrentProduct({ 
+                                ...currentProduct, 
+                                expiryDate: newExpiryDate 
+                              });
+                            }
+                          }}
+                        />
+                      )}
                     </View>
 
                     <View style={styles.inputGroup}>
@@ -699,7 +1147,20 @@ export default function GoodsReceiptCreate({
 
                     <TouchableOpacity
                       style={styles.addProductButton}
-                      onPress={handleAddProduct}
+                      onPress={() => {
+                        // Kiểm tra validation ngày trước khi thêm
+                        if (currentProduct.manufactureDate && currentProduct.expiryDate && 
+                            !validateExpiryDate(currentProduct.manufactureDate, currentProduct.expiryDate)) {
+                          setDialogConfig({
+                            type: 'error',
+                            title: 'Lỗi',
+                            message: 'Hạn sử dụng phải sau ngày sản xuất',
+                          });
+                          setShowDialog(true);
+                          return;
+                        }
+                        handleAddProduct();
+                      }}
                     >
                       <Text style={styles.addProductButtonText}>Thêm sản phẩm</Text>
                     </TouchableOpacity>
@@ -707,17 +1168,6 @@ export default function GoodsReceiptCreate({
                 </View>
               </View>
             </Modal>
-          )}
-
-          {/* Summary Section */}
-          {products.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tổng kết</Text>
-              <View style={[styles.summaryRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Tổng tiền:</Text>
-                <Text style={styles.totalValue}>{formatCurrency(subTotal)} đ</Text>
-              </View>
-            </View>
           )}
         </ScrollView>
 
@@ -742,6 +1192,22 @@ export default function GoodsReceiptCreate({
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Dialog Notification */}
+      <DialogNotification
+        visible={showDialog}
+        type={dialogConfig.type}
+        title={dialogConfig.title}
+        message={dialogConfig.message}
+        actions={[
+          {
+            text: 'OK',
+            onPress: () => setShowDialog(false),
+            style: 'default',
+          },
+        ]}
+        onDismiss={() => setShowDialog(false)}
+      />
     </Modal>
   );
 }
@@ -910,6 +1376,7 @@ const styles = StyleSheet.create({
   productDetail: {
     fontSize: 12,
     color: COLORS.gray600,
+    width: '50%',
   },
   productFooter: {
     borderTopWidth: 1,
@@ -953,15 +1420,17 @@ const styles = StyleSheet.create({
   productFormOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
   productForm: {
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    width: '90%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    width: '100%',
     maxHeight: '80%',
     padding: 16,
+    paddingBottom: 24,
   },
   productFormHeader: {
     flexDirection: 'row',
@@ -991,6 +1460,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: COLORS.gray800,
+    width: '50%',
+  },
+  summaryValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.gray800,
   },
   totalRow: {
     borderTopWidth: 1,
@@ -1050,5 +1529,113 @@ const styles = StyleSheet.create({
     color: COLORS.gray600,
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  totalAmountInput: {
+    backgroundColor: COLORS.gray50,
+    borderColor: COLORS.primary,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: 8,
+    backgroundColor: COLORS.white,
+  },
+  datePickerText: {
+    fontSize: 14,
+    color: COLORS.gray800,
+    width: '90%',
+  },
+  placeholderText: {
+    color: COLORS.gray400,
+  },
+  summarySection: {
+    backgroundColor: COLORS.white,
+    marginTop: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    borderRadius: 12,
+    marginHorizontal: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray200,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.gray800,
+    marginLeft: 8,
+  },
+  summaryContainer: {
+    gap: 12,
+  },
+  summaryInput: {
+    borderWidth: 1,
+    borderColor: COLORS.gray300,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: COLORS.gray800,
+    backgroundColor: COLORS.white,
+    textAlign: 'right',
+    minWidth: 120,
+    fontWeight: '600',
+  },
+  summaryInputDisabled: {
+    backgroundColor: COLORS.gray100,
+    color: COLORS.gray600,
+    borderColor: COLORS.gray200,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: COLORS.gray300,
+    marginVertical: 8,
+  },
+  totalSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  totalSummaryLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.gray800,
+  },
+  totalSummaryValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  summaryHelperText: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

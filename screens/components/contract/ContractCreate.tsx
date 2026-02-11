@@ -20,6 +20,7 @@ import PaymentTermsTab from './create/PaymentTermsTab';
 import ProductsTab from './create/ProductsTab';
 import ContractTypeTab from './create/ContractTypeTab';
 import DocumentsTab from './create/DocumentsTab';
+import DialogNotification from '../common/DialogNotification';
 import Snackbar from '../common/Snackbar';
 
 const COLORS = {
@@ -51,7 +52,6 @@ interface ContractCreateProps {
 
 interface ContractForm {
   title: string;
-  contractNumber: string;
   description: string;
   note: string;
   supplierId: string;
@@ -77,25 +77,28 @@ interface ContractTerm {
 }
 
 interface ContractItem {
-  productId: string;
+  variantId: string;
+  taxRate: number;
+  taxAmount: number;
+  discountRate: number;
+  discountAmount: number;
   quantity: number;
   unitPrice: number;
+  subTotal: number;
   totalPrice: number;
-  tax: number;
-  discount: number;
   note: string;
 }
 
 export default function ContractCreate({ visible, onClose, onSuccess }: ContractCreateProps) {
   const [loading, setLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+  const [variants, setVariants] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('basic');
+  const [dialog, setDialog] = useState<{ visible: boolean; title: string; message: string; type: 'success' | 'error' | 'warning' | 'info' }>({ visible: false, title: '', message: '', type: 'success' });
   const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'warning' | 'info' }>({ visible: false, message: '', type: 'success' });
   
   const [form, setForm] = useState<ContractForm>({
     title: '',
-    contractNumber: '',
     description: '',
     note: '',
     supplierId: '',
@@ -112,13 +115,13 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
   });
 
   const handleClose = () => {
-    // Reset snackbar state
+    // Reset dialog and snackbar state
+    setDialog({ visible: false, title: '', message: '', type: 'success' });
     setSnackbar({ visible: false, message: '', type: 'success' });
     
     // Reset form when closing
     setForm({
       title: '',
-      contractNumber: '',
       description: '',
       note: '',
       supplierId: '',
@@ -143,25 +146,79 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
     }
   }, [visible]);
 
+  // Auto update total value when items change
+  useEffect(() => {
+    const totalValue = form.items.reduce((total: number, item: any) => {
+      return total + (item.totalPrice || 0);
+    }, 0);
+    
+    if (form.totalValue !== totalValue) {
+      setForm((prev: any) => ({ ...prev, totalValue }));
+    }
+  }, [form.items]);
+
   const loadData = async () => {
     try {
-      const [suppliersData, productsData] = await Promise.all([
+      console.log('📊 Loading contract creation data...');
+      const [suppliersData, variantsData] = await Promise.all([
         partnerService.getSuppliers(),
-        productService.getProducts(),
+        productService.getProductVariants(),
       ]);
-      setSuppliers(suppliersData);
-      setProducts(productsData);
+      
+      console.log('✅ Data loaded:', {
+        suppliers: suppliersData?.length || 0,
+        variants: variantsData?.length || 0,
+      });
+      
+      if (!suppliersData || suppliersData.length === 0) {
+        Alert.alert('Cảnh báo', 'Không có nhà cung cấp nào. Vui lòng thêm nhà cung cấp trước khi tạo hợp đồng.');
+        return;
+      }
+      
+      if (!variantsData || variantsData.length === 0) {
+        Alert.alert('Cảnh báo', 'Không có sản phẩm nào. Vui lòng thêm sản phẩm trước khi tạo hợp đồng.');
+        return;
+      }
+      
+      setSuppliers(suppliersData || []);
+      setVariants(variantsData || []);
     } catch (error) {
-      Alert.alert('Lỗi', 'Không thể tải dữ liệu');
+      console.error('❌ Error loading data:', error);
+      Alert.alert('Lỗi', 'Không thể tải dữ liệu. Vui lòng thử lại.');
     }
   };
 
   const validateCurrentTab = () => {
     switch (activeTab) {
       case 'basic':
-        if (!form.title || !form.contractNumber) {
-          Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin bắt buộc (Tiêu đề và Số hợp đồng)');
+        if (!form.title) {
+          Alert.alert('Lỗi', 'Vui lòng điền tiêu đề hợp đồng');
           return false;
+        }
+        if (!form.supplierId) {
+          Alert.alert('Lỗi', 'Vui lòng chọn nhà cung cấp');
+          return false;
+        }
+        return true;
+      case 'products':
+        if (form.items.length === 0) {
+          Alert.alert('Lỗi', 'Vui lòng thêm ít nhất một sản phẩm');
+          return false;
+        }
+        for (let i = 0; i < form.items.length; i++) {
+          const item = form.items[i];
+          if (!item.variantId) {
+            Alert.alert('Lỗi', `Vui lòng chọn sản phẩm cho mục ${i + 1}`);
+            return false;
+          }
+          if (item.quantity <= 0) {
+            Alert.alert('Lỗi', `Số lượng sản phẩm ${i + 1} phải lớn hơn 0`);
+            return false;
+          }
+          if (item.unitPrice <= 0) {
+            Alert.alert('Lỗi', `Đơn giá sản phẩm ${i + 1} phải lớn hơn 0`);
+            return false;
+          }
         }
         return true;
       case 'contract':
@@ -170,6 +227,10 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
         const end = new Date(form.endDate);
         if (start.getTime() > sign.getTime() || sign.getTime() > end.getTime()) {
           Alert.alert('Lỗi', 'Ngày không hợp lệ: đảm bảo Ngày bắt đầu <= Ngày ký <= Ngày kết thúc');
+          return false;
+        }
+        if (form.paymentTermDays <= 0) {
+          Alert.alert('Lỗi', 'Số ngày thanh toán phải lớn hơn 0');
           return false;
         }
         return true;
@@ -216,7 +277,7 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
           <ProductsTab 
             form={form} 
             setForm={setForm} 
-            products={products} 
+            variants={variants} 
           />
         );
       case 'contract':
@@ -241,10 +302,37 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
   const handleSubmit = async () => {
     if (!validateCurrentTab()) return;
     
-    // Final validation
-    if (!form.title || !form.contractNumber) {
+    // Comprehensive final validation
+    if (!form.title) {
       setActiveTab('basic');
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin bắt buộc (Tiêu đề và Số hợp đồng)');
+      Alert.alert('Lỗi', 'Vui lòng điền tiêu đề hợp đồng');
+      return;
+    }
+
+    if (!form.supplierId) {
+      setActiveTab('basic');
+      Alert.alert('Lỗi', 'Vui lòng chọn nhà cung cấp');
+      return;
+    }
+
+    if (form.items.length === 0) {
+      setActiveTab('products');
+      Alert.alert('Lỗi', 'Vui lòng thêm ít nhất một sản phẩm');
+      return;
+    }
+
+    // Validate all items
+    for (let i = 0; i < form.items.length; i++) {
+      const item = form.items[i];
+      if (!item.variantId || item.quantity <= 0 || item.unitPrice <= 0) {
+        setActiveTab('products');
+        Alert.alert('Lỗi', `Sản phẩm ${i + 1} có thông tin không hợp lệ`);
+        return;
+      }
+    }
+
+    if (form.totalValue <= 0) {
+      Alert.alert('Lỗi', 'Tổng giá trị hợp đồng phải lớn hơn 0');
       return;
     }
 
@@ -266,58 +354,176 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
         return;
       }
 
+      // Validate supplier exists
+      const selectedSupplier = suppliers.find(s => s.id === form.supplierId);
+      if (!selectedSupplier) {
+        Alert.alert('Lỗi', 'Nhà cung cấp được chọn không còn tồn tại');
+        setLoading(false);
+        return;
+      }
+
+      // Validate all variants exist
+      for (const item of form.items) {
+        const variant = variants.find(v => v.id === item.variantId);
+        if (!variant) {
+          Alert.alert('Lỗi', `Sản phẩm được chọn không còn tồn tại`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Clean and validate payload to match API Swagger spec exactly
       const payload = {
-        supplierId: form.supplierId,
-        documents: form.documents,
-        terms: form.terms.map(term => ({
-          title: term.title,
-          paymentDate: term.paymentDate.toISOString(),
-          dueDate: term.dueDate.toISOString(),
-          amount: term.amount,
-          status: term.status,
-          note: term.note,
-        })),
-        items: form.items.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          tax: item.tax,
-          discount: item.discount,
-          note: item.note,
-        })),
-        title: form.title,
-        contractNumber: form.contractNumber,
-        description: form.description,
-        note: form.note,
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-        signDate: sign.toISOString(),
-        totalValue: form.totalValue,
+        supplierId: form.supplierId.trim(),
+        documents: form.documents.filter(doc => doc && typeof doc === 'string' && doc.trim()),
+        terms: form.terms.length > 0 ? form.terms
+          .filter(term => term.title && term.title.trim() && term.amount > 0)
+          .map(term => {
+            const paymentDate = new Date(term.paymentDate);
+            const dueDate = new Date(term.dueDate);
+            
+            // Validate dates
+            if (isNaN(paymentDate.getTime()) || isNaN(dueDate.getTime())) {
+              throw new Error('Ngày thanh toán hoặc ngày đáo hạn không hợp lệ');
+            }
+            
+            return {
+              title: term.title.trim(),
+              note: (term.note || '').trim(),
+              status: term.status || 'PENDING',
+              paymentDate: paymentDate.toISOString().split('T')[0], // Date-only format for terms
+              dueDate: dueDate.toISOString().split('T')[0], // Date-only format for terms
+              amount: Math.round(Math.max(0, term.amount) * 100) / 100,
+            };
+          }) : [],
+        items: form.items
+          .filter(item => item.variantId && item.quantity > 0 && item.unitPrice >= 0)
+          .map(item => {
+            const quantity = Math.max(0, Math.round(item.quantity));
+            const unitPrice = Math.max(0, Math.round(item.unitPrice * 100) / 100);
+            const taxRate = Math.max(0, Math.min(100, Math.round((item.taxRate || 0) * 100) / 100));
+            const discountRate = Math.max(0, Math.min(100, Math.round((item.discountRate || 0) * 100) / 100));
+            
+            const subTotal = quantity * unitPrice;
+            const discountAmount = subTotal * (discountRate / 100);
+            const afterDiscount = subTotal - discountAmount;
+            const taxAmount = afterDiscount * (taxRate / 100);
+            const totalPrice = afterDiscount + taxAmount;
+            
+            return {
+              variantId: item.variantId.trim(),
+              taxRate: taxRate,
+              taxAmount: Math.round(taxAmount * 100) / 100,
+              discountRate: discountRate,
+              discountAmount: Math.round(discountAmount * 100) / 100,
+              quantity: quantity,
+              unitPrice: unitPrice,
+              subTotal: Math.round(subTotal * 100) / 100,
+              totalPrice: Math.round(totalPrice * 100) / 100,
+              note: (item.note || '').trim(),
+            };
+          }),
+        title: form.title.trim(),
+        description: (form.description || '').trim(), // API expects this field
+        note: (form.note || '').trim(), // API expects this field
+        paymentTermDays: Math.max(1, Math.round(form.paymentTermDays)),
         debtRecognitionMode: form.debtRecognitionMode,
-        paymentTermDays: form.paymentTermDays,
         contractType: form.contractType,
-        status: 'DRAFT', // Tạo hợp đồng ở trạng thái nháp
+        startDate: start.toISOString(), // Full ISO datetime for contract dates
+        endDate: end.toISOString(), // Full ISO datetime for contract dates
+        signDate: sign.toISOString(), // Full ISO datetime for contract dates
+        totalValue: Math.round(Math.max(0, form.totalValue) * 100) / 100,
       };
 
-      await contractService.createContract(payload);
-      setSnackbar({ visible: true, message: 'Đã tạo hợp đồng thành công', type: 'success' });
+      // Final payload validation
+      if (!payload.supplierId || !payload.title || payload.items.length === 0) {
+        throw new Error('Dữ liệu không đầy đủ để tạo hợp đồng');
+      }
+
+      if (payload.totalValue <= 0) {
+        throw new Error('Tổng giá trị hợp đồng phải lớn hơn 0');
+      }
+
+      console.log('✅ Validated contract payload structure:', {
+        supplierId: payload.supplierId,
+        title: payload.title,
+        contractType: payload.contractType,
+        debtRecognitionMode: payload.debtRecognitionMode,
+        totalValue: payload.totalValue,
+        itemsCount: payload.items.length,
+        termsCount: payload.terms.length,
+        documentsCount: payload.documents.length,
+        dates: {
+          startDate: payload.startDate,
+          endDate: payload.endDate,
+          signDate: payload.signDate,
+        }
+      });
+
+      console.log('📤 Full payload being sent:', JSON.stringify(payload, null, 2));
+
+      const result = await contractService.createContract(payload);
+      console.log('✅ Contract created successfully:', result);
+      
+      // Show success dialog
+      setDialog({ 
+        visible: true, 
+        title: 'Tạo hợp đồng thành công', 
+        message: 'Hợp đồng đã được tạo thành công và đang ở trạng thái nháp.', 
+        type: 'success' 
+      });
       
       // Call onSuccess immediately for list refresh
       if (onSuccess) {
         onSuccess();
       }
+    } catch (error: any) {
+      console.error('❌ Contract creation error:', {
+        error: error,
+        message: error?.message,
+        code: error?.code,
+        status: error?.status,
+        response: error?.response,
+        form: {
+          title: form.title,
+          supplierId: form.supplierId,
+          itemsCount: form.items.length,
+          totalValue: form.totalValue,
+        }
+      });
       
-      // Close modal after snackbar is shown
-      setTimeout(() => {
-        handleClose();
-      }, 1500);
-    } catch (error) {
-      console.error('Contract creation error:', error);
-      setSnackbar({ visible: true, message: 'Tạo hợp đồng thất bại. Vui lòng thử lại.', type: 'error' });
+      // Parse error message for better user experience
+      let errorMessage = 'Tạo hợp đồng thất bại. Vui lòng thử lại.';
+      
+      if (error?.message) {
+        if (error.message.includes('supplier') || error.message.includes('Nhà cung cấp')) {
+          errorMessage = 'Nhà cung cấp không hợp lệ hoặc không tồn tại';
+        } else if (error.message.includes('variant') || error.message.includes('Sản phẩm')) {
+          errorMessage = 'Sản phẩm không hợp lệ hoặc không tồn tại';
+        } else if (error.message.includes('validation') || error.message.includes('không hợp lệ')) {
+          errorMessage = error.message;
+        } else if (error.message.includes('Dữ liệu không đầy đủ')) {
+          errorMessage = error.message;
+        } else if (error.code === 'INTERNAL_ERROR' || error?.status === 500) {
+          errorMessage = 'Lỗi hệ thống. Vui lòng kiểm tra dữ liệu và thử lại sau.';
+        } else if (error?.status === 400) {
+          errorMessage = 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin.';
+        } else if (error?.status === 401) {
+          errorMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        } else if (error?.status === 403) {
+          errorMessage = 'Bạn không có quyền tạo hợp đồng.';
+        }
+      }
+      
+      setSnackbar({ visible: true, message: errorMessage, type: 'error' });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDialogClose = () => {
+    setDialog({ visible: false, title: '', message: '', type: 'success' });
+    handleClose();
   };
 
   if (!visible) return null;
@@ -437,7 +643,7 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
                 ) : (
                   <>
                     <MaterialCommunityIcons name="check" size={20} color={COLORS.white} />
-                    <Text style={styles.submitText}>Tạo </Text>
+                    <Text style={styles.submitText}>Tạo</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -454,6 +660,21 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
         </View>
       </KeyboardAvoidingView>
       </SafeAreaView>
+      
+      <DialogNotification
+        visible={dialog.visible}
+        type={dialog.type}
+        title={dialog.title}
+        message={dialog.message}
+        actions={[
+          {
+            text: 'Đóng',
+            onPress: handleDialogClose,
+            style: 'default',
+          },
+        ]}
+        onDismiss={handleDialogClose}
+      />
       
       <Snackbar
         visible={snackbar.visible}

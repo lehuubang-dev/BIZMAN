@@ -216,10 +216,12 @@ export default function ContractDetail({ visible, contractId, onClose }: Contrac
                       )}
                       
                       <View style={styles.termDates}>
-                        <View style={styles.termDateItem}>
-                          <MaterialCommunityIcons name="calendar-clock" size={14} color={COLORS.gray600} />
-                          <Text style={styles.termDateLabel}>Hạn: {formatDate(term.dueDate)}</Text>
-                        </View>
+                        {term.dueDate && (
+                          <View style={styles.termDateItem}>
+                            <MaterialCommunityIcons name="calendar-clock" size={14} color={COLORS.gray600} />
+                            <Text style={styles.termDateLabel}>Hạn: {formatDate(term.dueDate)}</Text>
+                          </View>
+                        )}
                         {term.paymentDate && (
                           <View style={styles.termDateItem}>
                             <MaterialCommunityIcons name="calendar-check" size={14} color={COLORS.success} />
@@ -246,22 +248,22 @@ export default function ContractDetail({ visible, contractId, onClose }: Contrac
                   <Text style={styles.sectionTitle}>Sản phẩm ({contract.items.length})</Text>
                 </View>
                 {contract.items.map((item, index) => {
-                  const finalPrice = item.totalPrice + item.tax - item.discount;
+                  const finalPrice = item.totalPrice;
                   return (
                     <View key={item.id} style={styles.productCard}>
                       <View style={styles.productHeader}>
                         <Text style={styles.productIndex}>#{index + 1}</Text>
-                        <Text style={styles.productName}>{item.product.name}</Text>
+                        <Text style={styles.productName}>{item.variant.name}</Text>
                       </View>
                       
                       <View style={styles.productDetails}>
                         <View style={styles.productDetailRow}>
                           <Text style={styles.productLabel}>SKU:</Text>
-                          <Text style={styles.productValue}>{item.product.sku}</Text>
+                          <Text style={styles.productValue}>{item.variant.sku}</Text>
                         </View>
                         <View style={styles.productDetailRow}>
                           <Text style={styles.productLabel}>Số lượng:</Text>
-                          <Text style={styles.productValue}>{item.quantity} {item.product.unit}</Text>
+                          <Text style={styles.productValue}>{item.quantity} {item.variant.unit}</Text>
                         </View>
                         <View style={styles.productDetailRow}>
                           <Text style={styles.productLabel}>Đơn giá:</Text>
@@ -269,20 +271,20 @@ export default function ContractDetail({ visible, contractId, onClose }: Contrac
                         </View>
                         <View style={styles.productDetailRow}>
                           <Text style={styles.productLabel}>Tạm tính:</Text>
-                          <Text style={styles.productValue}>{formatCurrency(item.totalPrice)} đ</Text>
+                          <Text style={styles.productValue}>{formatCurrency(item.subTotal)} đ</Text>
                         </View>
-                        {item.discount > 0 && (
+                        {item.discountAmount > 0 && (
                           <View style={styles.productDetailRow}>
-                            <Text style={styles.productLabel}>Giảm giá:</Text>
+                            <Text style={styles.productLabel}>Giảm giá ({item.discountRate}%):</Text>
                             <Text style={[styles.productValue, { color: COLORS.error }]}>
-                              -{formatCurrency(item.discount)}
+                              -{formatCurrency(item.discountAmount)}
                             </Text>
                           </View>
                         )}
-                        {item.tax > 0 && (
+                        {item.taxAmount > 0 && (
                           <View style={styles.productDetailRow}>
-                            <Text style={styles.productLabel}>Thuế:</Text>
-                            <Text style={styles.productValue}>{formatCurrency(item.tax)}</Text>
+                            <Text style={styles.productLabel}>Thuế ({item.taxRate}%):</Text>
+                            <Text style={styles.productValue}>{formatCurrency(item.taxAmount)}</Text>
                           </View>
                         )}
                       </View>
