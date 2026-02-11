@@ -127,6 +127,25 @@ class PartnerService {
       throw error;
     }
   }
+
+  /**
+   * Add product to supplier
+   */
+  async addProductToSupplier(data: {
+    supplierId: string;
+    productVariantId: string;
+    supplierSku: string;
+    defaultUnitPrice: number;
+    leadTimeDays: number;
+  }): Promise<any> {
+    try {
+      const response = await apiClient.post<any>('/api/v1/partners/add-product-to-supplier', data);
+      return response;
+    } catch (error) {
+      console.error('Error adding product to supplier:', error);
+      throw error;
+    }
+  }
 }
 
 export const partnerService = new PartnerService();

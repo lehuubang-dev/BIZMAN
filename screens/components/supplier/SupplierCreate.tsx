@@ -45,7 +45,7 @@ export default function SupplierCreate({ visible, onClose, onSuccess }: Supplier
   const [bankAccount, setBankAccount] = useState('');
   const [bankBranch, setBankBranch] = useState('');
   const [paymentTermDays, setPaymentTermDays] = useState('0');
-  const [debtRecognitionMode, setDebtRecognitionMode] = useState('IMMEDIATE');
+  const [debtRecognitionMode, setDebtRecognitionMode] = useState('BY_RECEIPT_PARTIAL');
   const [maxDebt, setMaxDebt] = useState('0');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -61,7 +61,7 @@ export default function SupplierCreate({ visible, onClose, onSuccess }: Supplier
     setBankAccount('');
     setBankBranch('');
     setPaymentTermDays('0');
-    setDebtRecognitionMode('IMMEDIATE');
+    setDebtRecognitionMode('BY_RECEIPT_PARTIAL');
     setMaxDebt('0');
     setDescription('');
   };
@@ -278,7 +278,7 @@ export default function SupplierCreate({ visible, onClose, onSuccess }: Supplier
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Chế độ ghi nhận công nợ</Text>
               <View style={styles.radioGroup}>
-                <TouchableOpacity
+                {/* <TouchableOpacity
                   style={styles.radioOption}
                   onPress={() => setDebtRecognitionMode('IMMEDIATE')}
                   disabled={loading}
@@ -288,7 +288,7 @@ export default function SupplierCreate({ visible, onClose, onSuccess }: Supplier
                     {debtRecognitionMode === 'IMMEDIATE' && <View style={styles.radioSelected} />}
                   </View>
                   <Text style={styles.radioLabel}>Ghi nợ ngay</Text>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
                 <TouchableOpacity
                   style={styles.radioOption}
                   onPress={() => setDebtRecognitionMode('BY_RECEIPT_PARTIAL')}

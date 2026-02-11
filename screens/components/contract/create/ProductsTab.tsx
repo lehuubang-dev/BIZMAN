@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,9 @@ const COLORS = {
   gray100: '#F3F4F6',
   gray200: '#E5E7EB',
   gray400: '#9CA3AF',
+  gray500: '#6B7280',
   gray600: '#4B5563',
+  gray700: '#374151',
   gray800: '#1F2937',
   success: '#10B981',
   error: '#EF4444',
@@ -30,11 +32,30 @@ interface ProductsTabProps {
   form: any;
   setForm: (form: any) => void;
   variants: any[];
+  supplierId?: string;
+  supplierName?: string;
 }
 
-export default function ProductsTab({ form, setForm, variants }: ProductsTabProps) {
+export default function ProductsTab({ form, setForm, variants, supplierId, supplierName }: ProductsTabProps) {
   const [showVariantPicker, setShowVariantPicker] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState<number>(-1);
+
+  // Debug logging for variants
+  useEffect(() => {
+    console.log('🔍 ProductsTab received variants:', {
+      count: variants?.length || 0,
+      hasVariants: !!variants,
+      isArray: Array.isArray(variants),
+      firstVariant: variants?.[0] ? {
+        id: variants[0].id,
+        name: variants[0].name,
+        sku: variants[0].sku,
+        supplier: variants[0].supplier?.name || 'No supplier',
+        fullData: variants[0] // Log full data để xem cấu trúc
+      } : 'None',
+      allVariantsStructure: variants?.slice(0, 2)?.map(v => Object.keys(v)) // Xem tất cả các keys
+    });
+  }, [variants]);
 
   const handleAddItem = () => {
     const newItem = {
@@ -116,13 +137,38 @@ export default function ProductsTab({ form, setForm, variants }: ProductsTabProp
       const updatedItems = [...form.items];
       const item = updatedItems[selectedItemIndex];
       
+      // Ưu tiên dùng giá từ nhà cung cấp (defaultUnitPrice)
+      const unitPrice = variant.defaultUnitPrice || variant.lastPurchaseCost || variant.standardCost || 0;
+      
+      // Tự động set thuế từ productGroup
+      const taxRate = variant.product?.productGroup?.gtgttax || 0;
+      
+      // Tính toán với thuế
+      const quantity = item.quantity;
+      const subTotal = quantity * unitPrice;
+      const discountAmount = subTotal * (item.discountRate / 100);
+      const afterDiscount = subTotal - discountAmount;
+      const taxAmount = afterDiscount * (taxRate / 100);
+      const totalPrice = afterDiscount + taxAmount;
+      
       updatedItems[selectedItemIndex] = {
         ...item,
         variantId: variant.id,
-        unitPrice: variant.lastPurchaseCost || variant.standardCost || 0,
-        subTotal: item.quantity * (variant.lastPurchaseCost || variant.standardCost || 0),
-        totalPrice: item.quantity * (variant.lastPurchaseCost || variant.standardCost || 0),
+        unitPrice: unitPrice,
+        taxRate: taxRate, // Tự động set từ productGroup
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        subTotal: Math.round(subTotal * 100) / 100,
+        totalPrice: Math.round(totalPrice * 100) / 100,
       };
+      
+      console.log('🏷️ Auto-applied product info:', {
+        productName: variant.name,
+        unitPrice,
+        taxRate,
+        productGroup: variant.product?.productGroup?.name,
+        calculation: { subTotal, taxAmount, totalPrice }
+      });
+      
       setForm((prev: any) => ({ ...prev, items: updatedItems }));
     }
     setShowVariantPicker(false);
@@ -156,6 +202,21 @@ export default function ProductsTab({ form, setForm, variants }: ProductsTabProp
             <MaterialCommunityIcons name="cube-outline" size={24} color={COLORS.primary} />
             <Text style={styles.sectionTitle}>Sản phẩm</Text>
           </View>
+
+          {/* Supplier Filter Info */}
+          {supplierId && supplierName && (
+            <View style={styles.filterInfoCard}>
+              <View style={styles.filterInfoHeader}>
+                <MaterialCommunityIcons name="filter-variant" size={16} color={COLORS.primary} />
+                <Text style={styles.filterInfoText}>
+                  Hiển thị sản phẩm của: <Text style={styles.supplierNameText}>{supplierName}</Text>
+                </Text>
+              </View>
+              <Text style={styles.filterInfoSubtext}>
+                Có {variants.length} sản phẩm • Thuế và giá sẽ tự động áp dụng
+              </Text>
+            </View>
+          )}
 
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
@@ -335,30 +396,85 @@ export default function ProductsTab({ form, setForm, variants }: ProductsTabProp
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chọn sản phẩm</Text>
+            <Text style={styles.modalTitle}>Chọn sản phẩm ({variants?.length || 0} sản phẩm)</Text>
               <TouchableOpacity onPress={() => setShowVariantPicker(false)}>
                 <MaterialCommunityIcons name="close" size={24} color={COLORS.gray600} />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={variants}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.productItem}
-                  onPress={() => handleVariantSelect(item)}
-                >
-                  <View style={styles.productItemInfo}>
-                    <Text style={styles.productItemName}>{item.name}</Text>
-                    <Text style={styles.productItemSku}>SKU: {item.sku}</Text>
-                    <Text style={styles.productItemPrice}>
-                      {formatCurrency(item.lastPurchaseCost || item.standardCost || 0)}
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.gray400} />
-                </TouchableOpacity>
-              )}
-            />
+            {variants && variants.length > 0 ? (
+              <FlatList
+                data={variants}
+                keyExtractor={(item) => item.id || Math.random().toString()}
+                renderItem={({ item }) => {
+                  // Debug từng item khi render
+                  console.log('📝 Rendering variant item:', {
+                    id: item.id,
+                    name: item.name,
+                    sku: item.sku,
+                    model: item.model,
+                    partNumber: item.partNumber,
+                    supplierSku: item.supplierSku,
+                    defaultUnitPrice: item.defaultUnitPrice,
+                    lastPurchaseCost: item.lastPurchaseCost,
+                    standardCost: item.standardCost,
+                    supplier: item.supplier,
+                    hasName: !!item.name,
+                    hasSupplierPrice: !!item.defaultUnitPrice,
+                    hasStandardPrice: !!(item.lastPurchaseCost || item.standardCost)
+                  });
+                  
+                  // Fallback tên sản phẩm từ nhiều nguồn
+                  const productName = item.name || item.sku || item.model || item.partNumber || `Sản phẩm ${item.id?.substr(-4)}`;
+                  // Ưu tiên dùng giá từ nhà cung cấp (defaultUnitPrice)
+                  const productPrice = item.defaultUnitPrice || item.lastPurchaseCost || item.standardCost || 0;
+                  
+                  return (
+                    <TouchableOpacity
+                      style={styles.productItem}
+                      onPress={() => handleVariantSelect(item)}
+                    >
+                      <View style={styles.productItemInfo}>
+                        <Text style={styles.productItemName}>{productName}</Text>
+                        {item.sku && (
+                          <Text style={styles.productItemSku}>SKU: {item.sku}</Text>
+                        )}
+                        {item.supplierSku && (
+                          <Text style={styles.productItemSku}>SKU nhà CC: {item.supplierSku}</Text>
+                        )}
+                        {item.model && (
+                          <Text style={styles.productItemSku}>Model: {item.model}</Text>
+                        )}
+                        <Text style={styles.productItemPrice}>
+                          {formatCurrency(productPrice)}
+                        </Text>
+                        {item.supplier && (
+                          <Text style={styles.productItemSupplier}>Nhà cung cấp: {item.supplier.name}</Text>
+                        )}
+                        {item.leadTimeDays && (
+                          <Text style={styles.productItemLeadTime}>Thời gian giao: {item.leadTimeDays} ngày</Text>
+                        )}
+                        {item.product?.productGroup?.gtgttax && (
+                          <Text style={styles.productItemTax}>Thuế GTGT: {item.product.productGroup.gtgttax}%</Text>
+                        )}
+                        <Text style={styles.productItemUnit}>Đơn vị: {item.unit || 'Chiếc'}</Text>
+                      </View>
+                      <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.gray400} />
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            ) : (
+              <View style={styles.emptyVariantsContainer}>
+                <MaterialCommunityIcons name="package-variant-closed" size={48} color={COLORS.gray400} />
+                <Text style={styles.emptyVariantsText}>Không có sản phẩm</Text>
+                <Text style={styles.emptyVariantsSubtext}>
+                  Nhà cung cấp này chưa có sản phẩm nào
+                </Text>
+                <Text style={styles.debugText}>
+                  Debug: Nhận được {variants?.length || 0} sản phẩm
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -394,6 +510,35 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: COLORS.gray200,
+  },
+  filterInfoCard: {
+    backgroundColor: COLORS.primary + '08',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '20',
+  },
+  filterInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  filterInfoText: {
+    fontSize: 14,
+    color: COLORS.gray700,
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  supplierNameText: {
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  filterInfoSubtext: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginLeft: 24,
+    fontStyle: 'italic',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -609,5 +754,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  productItemSupplier: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  productItemLeadTime: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    marginTop: 1,
+    fontStyle: 'italic',
+  },
+  productItemTax: {
+    fontSize: 11,
+    color: COLORS.success,
+    marginTop: 1,
+    fontWeight: '500',
+  },
+  productItemUnit: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    marginTop: 1,
+    fontStyle: 'italic',
+  },
+  emptyVariantsContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyVariantsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.gray600,
+    marginTop: 12,
+  },
+  emptyVariantsSubtext: {
+    fontSize: 14,
+    color: COLORS.gray400,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  debugText: {
+    fontSize: 12,
+    color: COLORS.warning,
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });

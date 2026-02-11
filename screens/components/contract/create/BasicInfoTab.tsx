@@ -61,7 +61,7 @@ export default function BasicInfoTab({ form, setForm, suppliers }: BasicInfoTabP
           />
         </View>
 
-        <View style={styles.inputGroup}>
+        {/* <View style={styles.inputGroup}>
           <Text style={styles.label}>Số hợp đồng *</Text>
           <TextInput
             style={styles.input}
@@ -70,7 +70,7 @@ export default function BasicInfoTab({ form, setForm, suppliers }: BasicInfoTabP
             placeholder="Nhập số hợp đồng"
             placeholderTextColor={COLORS.gray400}
           />
-        </View>
+        </View> */}
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Mô tả</Text>

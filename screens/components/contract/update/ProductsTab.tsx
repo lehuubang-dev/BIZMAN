@@ -30,9 +30,11 @@ interface ProductsTabProps {
   form: any;
   setForm: (form: any) => void;
   variants: any[];
+  supplierId?: string;
+  supplierName?: string;
 }
 
-export default function ProductsTab({ form, setForm, variants }: ProductsTabProps) {
+export default function ProductsTab({ form, setForm, variants, supplierId, supplierName }: ProductsTabProps) {
   const [showVariantPicker, setShowVariantPicker] = useState(false);
   const [selectedItemIndex, setSelectedItemIndex] = useState<number>(-1);
 
@@ -116,13 +118,38 @@ export default function ProductsTab({ form, setForm, variants }: ProductsTabProp
       const updatedItems = [...form.items];
       const item = updatedItems[selectedItemIndex];
       
+      // Ưu tiên dùng giá từ nhà cung cấp (defaultUnitPrice)
+      const unitPrice = variant.defaultUnitPrice || variant.lastPurchaseCost || variant.standardCost || 0;
+      
+      // Tự động set thuế từ productGroup
+      const taxRate = variant.product?.productGroup?.gtgttax || 0;
+      
+      // Tính toán với thuế
+      const quantity = item.quantity;
+      const subTotal = quantity * unitPrice;
+      const discountAmount = subTotal * (item.discountRate / 100);
+      const afterDiscount = subTotal - discountAmount;
+      const taxAmount = afterDiscount * (taxRate / 100);
+      const totalPrice = afterDiscount + taxAmount;
+      
       updatedItems[selectedItemIndex] = {
         ...item,
         variantId: variant.id,
-        unitPrice: variant.lastPurchaseCost || variant.standardCost || 0,
-        subTotal: item.quantity * (variant.lastPurchaseCost || variant.standardCost || 0),
-        totalPrice: item.quantity * (variant.lastPurchaseCost || variant.standardCost || 0),
+        unitPrice: unitPrice,
+        taxRate: taxRate, // Tự động set từ productGroup
+        taxAmount: Math.round(taxAmount * 100) / 100,
+        subTotal: Math.round(subTotal * 100) / 100,
+        totalPrice: Math.round(totalPrice * 100) / 100,
       };
+      
+      console.log('🏷️ Update: Auto-applied product info:', {
+        productName: variant.name,
+        unitPrice,
+        taxRate,
+        productGroup: variant.product?.productGroup?.name,
+        calculation: { subTotal, taxAmount, totalPrice }
+      });
+      
       setForm((prev: any) => ({ ...prev, items: updatedItems }));
     }
     setShowVariantPicker(false);
@@ -335,29 +362,69 @@ export default function ProductsTab({ form, setForm, variants }: ProductsTabProp
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chọn sản phẩm</Text>
+            <Text style={styles.modalTitle}>Chọn sản phẩm ({variants?.length || 0} sản phẩm)</Text>
               <TouchableOpacity onPress={() => setShowVariantPicker(false)}>
                 <MaterialCommunityIcons name="close" size={24} color={COLORS.gray600} />
               </TouchableOpacity>
             </View>
+            
+            {/* Supplier Filter Info */}
+            {supplierId && supplierName && (
+              <View style={styles.filterInfoCard}>
+                <View style={styles.filterInfoHeader}>
+                  <MaterialCommunityIcons name="filter-variant" size={16} color={COLORS.primary} />
+                  <Text style={styles.filterInfoText}>
+                    Hiển thị sản phẩm của: <Text style={styles.supplierNameText}>{supplierName}</Text>
+                  </Text>
+                </View>
+                <Text style={styles.filterInfoSubtext}>
+                  Có {variants.length} sản phẩm • Thuế và giá sẽ tự động áp dụng
+                </Text>
+              </View>
+            )}
+            
             <FlatList
               data={variants}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.productItem}
-                  onPress={() => handleVariantSelect(item)}
-                >
-                  <View style={styles.productItemInfo}>
-                    <Text style={styles.productItemName}>{item.name}</Text>
-                    <Text style={styles.productItemSku}>SKU: {item.sku}</Text>
-                    <Text style={styles.productItemPrice}>
-                      {formatCurrency(item.lastPurchaseCost || item.standardCost || 0)}
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.gray400} />
-                </TouchableOpacity>
-              )}
+              renderItem={({ item }) => {
+                // Handle different API response structures
+                const productName = item.name || item.variant?.name || 'Sản phẩm không xác định';
+                const productPrice = item.defaultUnitPrice || item.lastPurchaseCost || item.variant?.lastPurchaseCost || item.standardCost || item.variant?.standardCost || 0;
+                
+                return (
+                  <TouchableOpacity
+                    style={styles.productItem}
+                    onPress={() => handleVariantSelect(item)}
+                  >
+                    <View style={styles.productItemInfo}>
+                      <Text style={styles.productItemName}>{productName}</Text>
+                      {item.sku && (
+                        <Text style={styles.productItemSku}>SKU: {item.sku}</Text>
+                      )}
+                      {item.supplierSku && (
+                        <Text style={styles.productItemSku}>SKU nhà CC: {item.supplierSku}</Text>
+                      )}
+                      {item.model && (
+                        <Text style={styles.productItemSku}>Model: {item.model}</Text>
+                      )}
+                      <Text style={styles.productItemPrice}>
+                        {formatCurrency(productPrice)}
+                      </Text>
+                      {item.supplier && (
+                        <Text style={styles.productItemSupplier}>Nhà cung cấp: {item.supplier.name}</Text>
+                      )}
+                      {item.leadTimeDays && (
+                        <Text style={styles.productItemLeadTime}>Thời gian giao: {item.leadTimeDays} ngày</Text>
+                      )}
+                      {item.product?.productGroup?.gtgttax && (
+                        <Text style={styles.productItemTax}>Thuế GTGT: {item.product.productGroup.gtgttax}%</Text>
+                      )}
+                      <Text style={styles.productItemUnit}>Đơn vị: {item.unit || 'Chiếc'}</Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.gray400} />
+                  </TouchableOpacity>
+                );
+              }}
             />
           </View>
         </View>
@@ -609,5 +676,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  filterInfoCard: {
+    backgroundColor: COLORS.gray50,
+    borderRadius: 8,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+  },
+  filterInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  filterInfoText: {
+    fontSize: 13,
+    color: COLORS.gray800,
+    fontWeight: '500',
+  },
+  supplierNameText: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  filterInfoSubtext: {
+    fontSize: 11,
+    color: COLORS.gray400,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  productItemSupplier: {
+    fontSize: 11,
+    color: COLORS.gray400,
+    marginTop: 2,
+  },
+  productItemLeadTime: {
+    fontSize: 11,
+    color: COLORS.warning,
+    marginTop: 1,
+    fontWeight: '500',
+  },
+  productItemTax: {
+    fontSize: 11,
+    color: COLORS.success,
+    marginTop: 1,
+    fontWeight: '500',
+  },
+  productItemUnit: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    marginTop: 1,
+    fontStyle: 'italic',
   },
 });

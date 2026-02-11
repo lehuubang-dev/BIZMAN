@@ -38,8 +38,8 @@ const COLORS = {
 
 const TABS = [
   { id: 'basic', title: 'Thông tin cơ bản', icon: 'file-document-edit-outline' },
-  { id: 'terms', title: 'Điều khoản TT', icon: 'credit-card-outline' },
   { id: 'products', title: 'Sản phẩm', icon: 'cube-outline' },
+  { id: 'terms', title: 'Điều khoản TT', icon: 'credit-card-outline' },
   { id: 'contract', title: 'Loại hợp đồng', icon: 'file-document-outline' },
   { id: 'documents', title: 'Tài liệu', icon: 'folder-outline' },
 ];
@@ -93,6 +93,7 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
   const [loading, setLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [variants, setVariants] = useState<any[]>([]);
+  const [filteredVariants, setFilteredVariants] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('basic');
   const [dialog, setDialog] = useState<{ visible: boolean; title: string; message: string; type: 'success' | 'error' | 'warning' | 'info' }>({ visible: false, title: '', message: '', type: 'success' });
   const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'warning' | 'info' }>({ visible: false, message: '', type: 'success' });
@@ -136,6 +137,7 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
       terms: [],
       items: [],
     });
+    setFilteredVariants(variants); // Reset filtered variants
     setActiveTab('basic');
     onClose();
   };
@@ -146,16 +148,115 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
     }
   }, [visible]);
 
-  // Auto update total value when items change
+  // Auto update total value when items or terms change
   useEffect(() => {
-    const totalValue = form.items.reduce((total: number, item: any) => {
+    // Tổng giá trị từ sản phẩm
+    const itemsTotal = form.items.reduce((total: number, item: any) => {
       return total + (item.totalPrice || 0);
     }, 0);
+    
+    // Tổng giá trị từ điều khoản thanh toán
+    const termsTotal = form.terms.reduce((total: number, term: any) => {
+      return total + (term.amount || 0);
+    }, 0);
+    
+    // Tổng giá trị hợp đồng = sản phẩm + điều khoản thanh toán
+    const totalValue = itemsTotal + termsTotal;
+    
+    console.log('💰 Contract value calculation:', {
+      itemsTotal: Math.round(itemsTotal * 100) / 100,
+      termsTotal: Math.round(termsTotal * 100) / 100,
+      totalValue: Math.round(totalValue * 100) / 100,
+      itemsCount: form.items.length,
+      termsCount: form.terms.length
+    });
     
     if (form.totalValue !== totalValue) {
       setForm((prev: any) => ({ ...prev, totalValue }));
     }
-  }, [form.items]);
+  }, [form.items, form.terms]);
+
+  // Filter variants when supplier changes
+  useEffect(() => {
+    const filterVariantsBySupplier = async () => {
+      console.log('🔄 Starting filter variants by supplier...', {
+        supplierId: form.supplierId,
+        totalVariants: variants.length
+      });
+      
+      if (!form.supplierId) {
+        // If no supplier selected, show all variants
+        console.log('📂 No supplier selected, showing all variants:', variants.length);
+        setFilteredVariants(variants);
+        return;
+      }
+
+      try {
+        console.log('🔍 Filtering variants by supplier API:', form.supplierId);
+        const filteredData = await productService.getProductVariantsBySupplierId(form.supplierId);
+        console.log('✅ API filter result:', {
+          filtered: filteredData?.length || 0,
+          hasData: !!filteredData,
+          isArray: Array.isArray(filteredData)
+        });
+        
+        if (filteredData && Array.isArray(filteredData) && filteredData.length > 0) {
+          setFilteredVariants(filteredData);
+          console.log('✅ Applied API filtered variants:', filteredData.length);
+        } else {
+          console.log('⚠️ API returned empty, trying client-side filtering...');
+          // Try client-side filtering as backup
+          const clientFiltered = variants.filter(variant => {
+            const hasSupplier = variant.supplier?.id === form.supplierId;
+            console.log('🧮 Client filtering variant:', {
+              variantId: variant.id,
+              variantName: variant.name,
+              variantSupplierId: variant.supplier?.id,
+              targetSupplierId: form.supplierId,
+              isMatch: hasSupplier
+            });
+            return hasSupplier;
+          });
+          
+          console.log('📋 Client filtering result:', clientFiltered.length, 'variants found');
+          setFilteredVariants(clientFiltered);
+          
+          if (clientFiltered.length === 0) {
+            console.log('⚠️ No variants found for supplier, showing all variants as fallback');
+            setFilteredVariants(variants);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error filtering variants by supplier:', error);
+        // Fallback: try client-side filtering if API fails
+        const clientFiltered = variants.filter(variant => {
+          const hasSupplier = variant.supplier?.id === form.supplierId;
+          console.log('🧮 Fallback filtering variant:', {
+            variantId: variant.id,
+            variantName: variant.name,
+            variantSupplierId: variant.supplier?.id,
+            targetSupplierId: form.supplierId,
+            isMatch: hasSupplier
+          });
+          return hasSupplier;
+        });
+        
+        setFilteredVariants(clientFiltered);
+        console.log('⚠️ Error fallback - using client-side filtering, found:', clientFiltered.length, 'variants');
+        
+        if (clientFiltered.length === 0) {
+          console.log('⚠️ No variants found, showing all as final fallback');
+          setFilteredVariants(variants);
+        }
+      }
+    };
+
+    if (variants.length > 0) {
+      filterVariantsBySupplier();
+    } else {
+      console.log('⏳ Variants not loaded yet, skipping filter');
+    }
+  }, [form.supplierId, variants]);
 
   const loadData = async () => {
     try {
@@ -182,6 +283,15 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
       
       setSuppliers(suppliersData || []);
       setVariants(variantsData || []);
+      setFilteredVariants(variantsData || []); // Initialize with all variants
+      
+      console.log('📊 Final data setup:', {
+        suppliers: (suppliersData || []).length,
+        variants: (variantsData || []).length,
+        filtered: (variantsData || []).length,
+        firstVariantHasSupplier: variantsData?.[0]?.supplier ? 'Yes' : 'No',
+        firstVariantSupplier: variantsData?.[0]?.supplier?.name || 'None'
+      });
     } catch (error) {
       console.error('❌ Error loading data:', error);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu. Vui lòng thử lại.');
@@ -273,11 +383,14 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
           />
         );
       case 'products':
+        const selectedSupplier = suppliers.find(s => s.id === form.supplierId);
         return (
           <ProductsTab 
             form={form} 
             setForm={setForm} 
-            variants={variants} 
+            variants={filteredVariants}
+            supplierId={form.supplierId}
+            supplierName={selectedSupplier?.name}
           />
         );
       case 'contract':
@@ -362,14 +475,21 @@ export default function ContractCreate({ visible, onClose, onSuccess }: Contract
         return;
       }
 
-      // Validate all variants exist
+      // Validate all variants exist in filtered list
       for (const item of form.items) {
-        const variant = variants.find(v => v.id === item.variantId);
+        const variant = filteredVariants.find(v => v.id === item.variantId);
         if (!variant) {
-          Alert.alert('Lỗi', `Sản phẩm được chọn không còn tồn tại`);
+          Alert.alert('Lỗi', `Sản phẩm được chọn không còn tồn tại hoặc không thuộc nhà cung cấp đã chọn`);
           setLoading(false);
           return;
         }
+        
+        // No need to check supplier anymore since filteredVariants already contains only supplier's products
+        console.log('✅ Variant validation passed:', {
+          variantId: variant.id,
+          variantName: variant.name || variant.variant?.name,
+          supplierId: form.supplierId
+        });
       }
 
       // Clean and validate payload to match API Swagger spec exactly

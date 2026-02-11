@@ -197,6 +197,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: COLORS.gray800,
+    width: '100%',
+    textAlign: 'center',
   },
   searchContainer: {
     backgroundColor: COLORS.white,

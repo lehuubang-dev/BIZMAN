@@ -74,6 +74,7 @@ export default function ImportGoodCreate({
   const [productOptions, setProductOptions] = useState<any[]>([]);
   const [contractDetail, setContractDetail] = useState<any>(null);
   const [allProducts, setAllProducts] = useState<any[]>([]);
+  const [contractProductQuantities, setContractProductQuantities] = useState<{[key: string]: number}>({});
 
   // Form fields
   const [supplier, setSupplier] = useState("");
@@ -137,26 +138,66 @@ export default function ImportGoodCreate({
     if (!contractId) {
       setContractDetail(null);
       setProductOptions(allProducts);
+      setContractProductQuantities({});
       return;
     }
     
     setLoadingContract(true);
     try {
-      const data = await contractService.getContractById(contractId);
-      console.log('Contract Detail:', data);
+      // Load contract detail and product quantities in parallel
+      const [contractData, quantitiesResponse] = await Promise.all([
+        contractService.getContractById(contractId),
+        purchaseOrderService.getProductQuantitiesByContractId(contractId)
+      ]);
       
-      if (data) {
-        setContractDetail(data);
+      console.log('Contract Detail:', contractData);
+      console.log('Product Quantities Response:', quantitiesResponse);
+      
+      if (contractData) {
+        setContractDetail(contractData);
         
         // Auto-fill supplier (không thể thay đổi)
-        if (data.supplier?.id) {
-          setSupplier(data.supplier.id);
+        if (contractData.supplier?.id) {
+          setSupplier(contractData.supplier.id);
         }
         
+        // Chỉ gợi ý kho hàng từ hợp đồng, không tự động chọn
+        // Người dùng có thể tự chọn kho hàng phù hợp
+        // setWarehouse sẽ được gọi khi user chọn trong dropdown
+        
+        // Tạo object mapping cho số lượng còn lại
+        const remainingQuantities: {[key: string]: number} = {};
+        
+        // Kiểm tra xem API trả về số lượng gốc hay số lượng còn lại
+        if (contractData.items && contractData.items.length > 0) {
+          contractData.items.forEach((item: any) => {
+            const variantId = item.variant.id;
+            const originalQuantity = item.quantity; // Số lượng gốc từ hợp đồng
+            
+            // API response format: quantitiesResponse.data[variantId] = remaining quantity
+            // Nếu API trả về số lượng còn lại thì dùng trực tiếp
+            // Nếu không có trong response hoặc bằng số lượng gốc thì tính toán
+            const apiQuantity = quantitiesResponse?.data?.[variantId];
+            
+            if (apiQuantity !== undefined) {
+              // API có trả về dữ liệu cho variant này
+              remainingQuantities[variantId] = apiQuantity;
+              console.log(`Variant ${variantId}: Original=${originalQuantity}, API_Remaining=${apiQuantity}`);
+            } else {
+              // API không có dữ liệu, giả sử chưa nhập hàng
+              remainingQuantities[variantId] = originalQuantity;
+              console.log(`Variant ${variantId}: Original=${originalQuantity}, Assumed_Remaining=${originalQuantity}`);
+            }
+          });
+        }
+        
+        console.log('Final Remaining Quantities:', remainingQuantities);
+        setContractProductQuantities(remainingQuantities);
+        
         // Filter products theo contract items - API trả về variant thay vì product
-        if (data.items && data.items.length > 0) {
+        if (contractData.items && contractData.items.length > 0) {
           // Lấy danh sách variant từ contract items
-          const contractProducts = data.items.map((item: any) => ({
+          const contractProducts = contractData.items.map((item: any) => ({
             ...item.variant,
             // Thêm thông tin từ contract item để dùng sau
             contractQuantity: item.quantity,
@@ -165,18 +206,22 @@ export default function ImportGoodCreate({
             contractTaxAmount: item.taxAmount,
             contractDiscountRate: item.discountRate,
             contractDiscountAmount: item.discountAmount,
-            contractNote: item.note
+            contractNote: item.note,
+            // Thêm số lượng còn lại từ tính toán
+            remainingQuantity: remainingQuantities[item.variant.id] || 0
           }));
           setProductOptions(contractProducts);
+          console.log('Contract products with remaining quantities:', contractProducts);
         } else {
           setProductOptions(allProducts);
         }
       }
     } catch (error: any) {
-      console.error('Error loading contract detail:', error);
+      console.error('Error loading contract detail or quantities:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin hợp đồng');
       setContractDetail(null);
       setProductOptions(allProducts);
+      setContractProductQuantities({});
     } finally {
       setLoadingContract(false);
     }
@@ -196,6 +241,7 @@ export default function ImportGoodCreate({
     setOrderStatus("DRAFT");
     setContractDetail(null);
     setProductOptions(allProducts);
+    setContractProductQuantities({});
   };
 
   const calculateProductPrices = (product: ProductItem): ProductItem => {
@@ -249,7 +295,7 @@ export default function ImportGoodCreate({
           ...currentProduct,
           id: productId,
           name: productName,
-          quantity: selectedProduct.contractQuantity,
+          quantity: 1, // Luôn bắt đầu với số lượng 1
           unitPrice: selectedProduct.contractUnitPrice,
           discountAmount: selectedProduct.contractDiscountAmount || 0,
           taxAmount: selectedProduct.contractTaxAmount || 0,
@@ -263,12 +309,31 @@ export default function ImportGoodCreate({
           ...currentProduct,
           id: productId,
           name: productName,
+          quantity: 1, // Luôn bắt đầu với số lượng 1
           unitPrice: selectedProduct.standardCost || selectedProduct.lastPurchaseCost || selectedProduct.costPrice || selectedProduct.price || selectedProduct.unitPrice || 0,
           discountAmount: undefined,
           taxAmount: undefined,
         });
       }
     }
+  };
+
+  // Helper function để tính số lượng còn lại thực tế
+  const getActualRemainingQuantity = (productId: string) => {
+    if (!contractDetail || contractProductQuantities[productId] === undefined) {
+      return null;
+    }
+    
+    // Số lượng còn lại từ API (đã trừ các đơn hàng trước đó)
+    const apiRemainingQuantity = contractProductQuantities[productId];
+    
+    // Số lượng đã thêm trong session hiện tại
+    const usedInCurrentSession = products
+      .filter(p => p.id === productId)
+      .reduce((total, p) => total + p.quantity, 0);
+    
+    // Số lượng còn lại thực tế = số lượng từ API - số lượng đã dùng trong session
+    return Math.max(0, apiRemainingQuantity - usedInCurrentSession);
   };
 
   const handleAddProduct = () => {
@@ -283,15 +348,13 @@ export default function ImportGoodCreate({
       return;
     }
 
-    // Nếu có contract, kiểm tra số lượng không vượt quá
-    if (contractDetail) {
-      const contractItem = contractDetail.items?.find(
-        (item: any) => item.variant.id === currentProduct.id
-      );
-      if (contractItem && currentProduct.quantity > contractItem.quantity) {
+    // Nếu có contract, kiểm tra số lượng không vượt quá số lượng còn lại thực tế
+    if (contractDetail && contractProductQuantities[currentProduct.id] !== undefined) {
+      const actualRemainingQuantity = getActualRemainingQuantity(currentProduct.id);
+      if (actualRemainingQuantity !== null && currentProduct.quantity > actualRemainingQuantity) {
         Alert.alert(
           "Thông báo",
-          `Số lượng không được vượt quá ${contractItem.quantity} (theo hợp đồng)`
+          `Số lượng không được vượt quá ${actualRemainingQuantity} (số lượng còn lại trong hợp đồng)`
         );
         return;
       }
@@ -548,6 +611,46 @@ export default function ImportGoodCreate({
               <Text style={styles.label}>
                 Kho hàng <Text style={styles.required}>*</Text>
               </Text>
+              
+              {/* Hiển thị thông tin kho hàng từ hợp đồng */}
+              {contractDetail && contractDetail.warehouse && (
+                <View style={styles.contractWarehouseInfo}>
+                  <View style={styles.contractWarehouseHeader}>
+                    <MaterialCommunityIcons 
+                      name="warehouse" 
+                      size={16} 
+                      color={COLORS.primary} 
+                    />
+                    <Text style={styles.contractWarehouseTitle}>
+                      Kho hàng từ hợp đồng
+                    </Text>
+                  </View>
+                  <View style={styles.contractWarehouseDetails}>
+                    <Text style={styles.contractWarehouseName}>
+                      {contractDetail.warehouse.name}
+                    </Text>
+                    {contractDetail.warehouse.address && (
+                      <Text style={styles.contractWarehouseAddress}>
+                        📍 {contractDetail.warehouse.address}
+                      </Text>
+                    )}
+                    {contractDetail.warehouse.manager && (
+                      <Text style={styles.contractWarehouseManager}>
+                        👤 {contractDetail.warehouse.manager}
+                      </Text>
+                    )}
+                    {contractDetail.warehouse.phone && (
+                      <Text style={styles.contractWarehousePhone}>
+                        📞 {contractDetail.warehouse.phone}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={styles.contractWarehouseNote}>
+                    💡 Bạn có thể chọn kho hàng khác nếu cần
+                  </Text>
+                </View>
+              )}
+              
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={warehouse}
@@ -556,10 +659,20 @@ export default function ImportGoodCreate({
                 >
                   <Picker.Item label="-- Chọn kho hàng --" value="" />
                   {warehouses.map((w) => (
-                    <Picker.Item key={w.id} label={w.name} value={w.id} />
+                    <Picker.Item 
+                      key={w.id} 
+                      label={w.name + (contractDetail && contractDetail.warehouse && w.id === contractDetail.warehouse.id ? ' (Từ hợp đồng)' : '')} 
+                      value={w.id} 
+                    />
                   ))}
                 </Picker>
               </View>
+              
+              {warehouse && warehouse !== contractDetail?.warehouse?.id && contractDetail?.warehouse && (
+                <Text style={styles.warningText}>
+                  ⚠️ Bạn đã chọn kho hàng khác với kho hàng trong hợp đồng
+                </Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -849,24 +962,60 @@ export default function ImportGoodCreate({
                       <TextInput
                         style={styles.input}
                         value={currentProduct.quantity.toString()}
-                        onChangeText={(text) =>
-                          setCurrentProduct({
-                            ...currentProduct,
-                            quantity: parseInt(text) || 0,
-                          })
-                        }
+                        onChangeText={(text) => {
+                          // Chỉ cho phép số dương
+                          const numValue = parseInt(text) || 0;
+                          if (numValue >= 0) {
+                            setCurrentProduct({
+                              ...currentProduct,
+                              quantity: numValue,
+                            });
+                          }
+                        }}
                         placeholder="Số lượng"
                         keyboardType="numeric"
                         placeholderTextColor={COLORS.gray400}
                       />
                       {contractDetail && currentProduct.id && (() => {
-                        const contractItem = contractDetail.items?.find(
-                          (item: any) => item.variant.id === currentProduct.id
-                        );
-                        return contractItem ? (
-                          <Text style={styles.helperText}>
-                            Số lượng tối đa: {contractItem.quantity} (theo hợp đồng)
-                          </Text>
+                        const actualRemainingQuantity = getActualRemainingQuantity(currentProduct.id);
+                        const apiRemainingQuantity = contractProductQuantities[currentProduct.id];
+                        const usedInCurrentSession = products
+                          .filter(p => p.id === currentProduct.id)
+                          .reduce((total, p) => total + p.quantity, 0);
+                        
+                        // Tìm thông tin gốc từ contract
+                        const contractItem = contractDetail.items?.find((item: any) => item.variant.id === currentProduct.id);
+                        const originalContractQuantity = contractItem?.quantity || 0;
+                        
+                        return apiRemainingQuantity !== undefined ? (
+                          <View>
+                            <View style={styles.quantityDebugContainer}>
+                              <Text style={styles.quantityDebugTitle}>📊 Tình huống số lượng:</Text>
+                              <Text style={styles.quantityDebugText}>
+                                • Số lượng hợp đồng: {originalContractQuantity}
+                              </Text>
+                              <Text style={styles.quantityDebugText}>
+                                • Còn lại: {apiRemainingQuantity}
+                              </Text>
+                              {usedInCurrentSession > 0 && (
+                                <Text style={styles.quantityDebugText}>
+                                  • Đang sử dụng: {usedInCurrentSession}
+                                </Text>
+                              )}
+                              <Text style={[styles.quantityDebugText, styles.quantityFinalText]}>
+                                ✅ Còn lại thực tế: {actualRemainingQuantity}
+                              </Text>
+                            </View>
+                            
+                            <Text style={styles.helperText}>
+                              Số lượng còn lại: {actualRemainingQuantity} (theo hợp đồng)
+                            </Text>
+                            {usedInCurrentSession > 0 && (
+                              <Text style={styles.usedQuantityText}>
+                                Đã sử dụng trong đơn này: {usedInCurrentSession}
+                              </Text>
+                            )}
+                          </View>
                         ) : null;
                       })()}
                     </View>
@@ -1480,5 +1629,105 @@ const styles = StyleSheet.create({
   inputDisabled: {
     backgroundColor: COLORS.gray100,
     color: COLORS.gray600,
+  },
+  
+  // Contract warehouse info styles
+  contractWarehouseInfo: {
+    backgroundColor: COLORS.primary + "08",
+    borderWidth: 1,
+    borderColor: COLORS.primary + "20",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  contractWarehouseHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  contractWarehouseTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.primary,
+    flex: 1,
+  },
+  contractWarehouseDetails: {
+    gap: 6,
+    marginBottom: 10,
+  },
+  contractWarehouseName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.gray800,
+  },
+  contractWarehouseAddress: {
+    fontSize: 13,
+    color: COLORS.gray600,
+    lineHeight: 18,
+  },
+  contractWarehouseManager: {
+    fontSize: 13,
+    color: COLORS.gray600,
+  },
+  contractWarehousePhone: {
+    fontSize: 13,
+    color: COLORS.gray600,
+  },
+  contractWarehouseNote: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontStyle: "italic",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.primary + "20",
+  },
+  warningText: {
+    fontSize: 12,
+    color: COLORS.error,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: COLORS.error + "10",
+    borderRadius: 6,
+    fontWeight: "500",
+  },
+  usedQuantityText: {
+    fontSize: 11,
+    color: COLORS.gray400,
+    marginTop: 2,
+    fontStyle: "italic",
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  quantityDebugContainer: {
+    backgroundColor: COLORS.gray50,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  quantityDebugTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.gray800,
+    marginBottom: 6,
+  },
+  quantityDebugText: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    lineHeight: 16,
+    marginBottom: 2,
+    fontFamily: "monospace",
+  },
+  quantityFinalText: {
+    fontWeight: "700",
+    color: COLORS.success,
+    marginTop: 4,
   },
 });

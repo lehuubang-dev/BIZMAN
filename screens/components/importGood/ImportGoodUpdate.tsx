@@ -100,6 +100,7 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
   const [productOptions, setProductOptions] = useState<any[]>([]);
   const [contractDetail, setContractDetail] = useState<any>(null);
   const [allProducts, setAllProducts] = useState<any[]>([]);
+  const [contractProductQuantities, setContractProductQuantities] = useState<{[key: string]: number}>({});
 
   // Product form
   const [showProductForm, setShowProductForm] = useState(false);
@@ -159,6 +160,7 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
       } else {
         setContractDetail(null);
         setProductOptions(allProducts);
+        setContractProductQuantities({});
       }
     } catch (err: any) {
       Alert.alert('Lỗi', err && err.message ? err.message : 'Không thể tải đơn hàng');
@@ -172,21 +174,55 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
     if (!contractId) {
       setContractDetail(null);
       setProductOptions(allProducts);
+      setContractProductQuantities({});
       return;
     }
     
     setLoadingContract(true);
     try {
-      const data = await contractService.getContractById(contractId);
-      console.log('Contract Detail:', data);
+      // Load contract detail and product quantities in parallel
+      const [contractData, quantitiesResponse] = await Promise.all([
+        contractService.getContractById(contractId),
+        purchaseOrderService.getProductQuantitiesByContractId(contractId)
+      ]);
       
-      if (data) {
-        setContractDetail(data);
+      console.log('Contract Detail:', contractData);
+      console.log('Product Quantities Response:', quantitiesResponse);
+      
+      if (contractData) {
+        setContractDetail(contractData);
+        
+        // Tạo object mapping cho số lượng còn lại
+        const remainingQuantities: {[key: string]: number} = {};
+        
+        // Kiểm tra xem API trả về số lượng gốc hay số lượng còn lại
+        if (contractData.items && contractData.items.length > 0) {
+          contractData.items.forEach((item: any) => {
+            const variantId = item.variant.id;
+            const originalQuantity = item.quantity; // Số lượng gốc từ hợp đồng
+            
+            // API response format: quantitiesResponse.data[variantId] = remaining quantity
+            const apiQuantity = quantitiesResponse?.data?.[variantId];
+            
+            if (apiQuantity !== undefined) {
+              // API có trả về dữ liệu cho variant này
+              remainingQuantities[variantId] = apiQuantity;
+              console.log(`Variant ${variantId}: Original=${originalQuantity}, API_Remaining=${apiQuantity}`);
+            } else {
+              // API không có dữ liệu, giả sử chưa nhập hàng
+              remainingQuantities[variantId] = originalQuantity;
+              console.log(`Variant ${variantId}: Original=${originalQuantity}, Assumed_Remaining=${originalQuantity}`);
+            }
+          });
+        }
+        
+        console.log('Final Remaining Quantities:', remainingQuantities);
+        setContractProductQuantities(remainingQuantities);
         
         // Filter products theo contract items - API trả về variant thay vì product
-        if (data.items && data.items.length > 0) {
+        if (contractData.items && contractData.items.length > 0) {
           // Lấy danh sách variant từ contract items
-          const contractProducts = data.items.map((item: any) => ({
+          const contractProducts = contractData.items.map((item: any) => ({
             ...item.variant,
             // Thêm thông tin từ contract item để dùng sau
             contractQuantity: item.quantity,
@@ -195,21 +231,43 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
             contractTaxAmount: item.taxAmount,
             contractDiscountRate: item.discountRate,
             contractDiscountAmount: item.discountAmount,
-            contractNote: item.note
+            contractNote: item.note,
+            // Thêm số lượng còn lại từ tính toán
+            remainingQuantity: remainingQuantities[item.variant.id] || 0
           }));
           setProductOptions(contractProducts);
+          console.log('Contract products with remaining quantities:', contractProducts);
         } else {
           setProductOptions(allProducts);
         }
       }
     } catch (error: any) {
-      console.error('Error loading contract detail:', error);
+      console.error('Error loading contract detail or quantities:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin hợp đồng');
       setContractDetail(null);
       setProductOptions(allProducts);
+      setContractProductQuantities({});
     } finally {
       setLoadingContract(false);
     }
+  };
+
+  // Helper function để tính số lượng còn lại thực tế
+  const getActualRemainingQuantity = (productId: string) => {
+    if (!contractDetail || contractProductQuantities[productId] === undefined) {
+      return null;
+    }
+    
+    // Số lượng còn lại từ API (đã trừ các đơn hàng trước đó)
+    const apiRemainingQuantity = contractProductQuantities[productId];
+    
+    // Số lượng đã có trong form hiện tại (exclude current editing)
+    const usedInCurrentOrder = (form?.products || [])
+      .filter((p: any) => (p.variant?.id || p.id) === productId)
+      .reduce((total: number, p: any) => total + p.quantity, 0);
+    
+    // Số lượng còn lại thực tế = số lượng từ API - số lượng đã dùng trong order
+    return Math.max(0, apiRemainingQuantity - usedInCurrentOrder);
   };
 
   const handleChange = (key: string, value: any) => {
@@ -222,6 +280,11 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
       // Reset supplier if contract changes
       if (value && contractDetail && contractDetail.supplier?.id) {
         setForm((prev: any) => ({ ...prev, supplier: contractDetail.supplier.id }));
+      }
+      
+      // Reset contract product quantities if no contract
+      if (!value) {
+        setContractProductQuantities({});
       }
     }
   };
@@ -524,6 +587,46 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
                 <Text style={styles.label}>
                   Kho hàng <Text style={styles.required}>*</Text>
                 </Text>
+                
+                {/* Hiển thị thông tin kho hàng từ hợp đồng */}
+                {contractDetail && contractDetail.warehouse && (
+                  <View style={styles.contractWarehouseInfo}>
+                    <View style={styles.contractWarehouseHeader}>
+                      <MaterialCommunityIcons 
+                        name="warehouse" 
+                        size={16} 
+                        color={COLORS.primary} 
+                      />
+                      <Text style={styles.contractWarehouseTitle}>
+                        Kho hàng từ hợp đồng
+                      </Text>
+                    </View>
+                    <View style={styles.contractWarehouseDetails}>
+                      <Text style={styles.contractWarehouseName}>
+                        {contractDetail.warehouse.name}
+                      </Text>
+                      {contractDetail.warehouse.address && (
+                        <Text style={styles.contractWarehouseAddress}>
+                          📍 {contractDetail.warehouse.address}
+                        </Text>
+                      )}
+                      {contractDetail.warehouse.manager && (
+                        <Text style={styles.contractWarehouseManager}>
+                          👤 {contractDetail.warehouse.manager}
+                        </Text>
+                      )}
+                      {contractDetail.warehouse.phone && (
+                        <Text style={styles.contractWarehousePhone}>
+                          📞 {contractDetail.warehouse.phone}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.contractWarehouseNote}>
+                      💡 Bạn có thể chọn kho hàng khác nếu cần
+                    </Text>
+                  </View>
+                )}
+                
                 <View style={styles.pickerContainer}>
                   <Picker
                     selectedValue={form.warehouse?.id || form.warehouse || ''}
@@ -532,10 +635,20 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
                   >
                     <Picker.Item label="-- Chọn kho hàng --" value="" />
                     {warehouses.map((w) => (
-                      <Picker.Item key={w.id} label={w.name} value={w.id} />
+                      <Picker.Item 
+                        key={w.id} 
+                        label={w.name + (contractDetail && contractDetail.warehouse && w.id === contractDetail.warehouse.id ? ' (Từ hợp đồng)' : '')} 
+                        value={w.id} 
+                      />
                     ))}
                   </Picker>
                 </View>
+                
+                {form.warehouse && form.warehouse !== contractDetail?.warehouse?.id && contractDetail?.warehouse && (
+                  <Text style={styles.warningText}>
+                    ⚠️ Bạn đã chọn kho hàng khác với kho hàng trong hợp đồng
+                  </Text>
+                )}
               </View>
 
               <View style={styles.inputGroup}>
@@ -831,35 +944,81 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
                     <TextInput
                       style={styles.input}
                       value={currentProduct.quantity.toString()}
-                      onChangeText={(text) =>
-                        setCurrentProduct({
-                          ...currentProduct,
-                          quantity: parseInt(text) || 0,
-                        })
-                      }
-                      placeholder="Số lượng"
-                      keyboardType="numeric"
-                      placeholderTextColor={COLORS.gray400}
-                    />
-                  </View>
+                        onChangeText={(text) => {
+                          // Chỉ cho phép số dương
+                          const numValue = parseInt(text) || 0;
+                          if (numValue >= 0) {
+                            setCurrentProduct({
+                              ...currentProduct,
+                              quantity: numValue,
+                            });
+                          }
+                        }}
+                        placeholder="Số lượng"
+                        keyboardType="numeric"
+                        placeholderTextColor={COLORS.gray400}
+                      />
+                      {contractDetail && currentProduct.id && (() => {
+                        const actualRemainingQuantity = getActualRemainingQuantity(currentProduct.id);
+                        const apiRemainingQuantity = contractProductQuantities[currentProduct.id];
+                        const usedInCurrentOrder = (form?.products || [])
+                          .filter((p: any) => (p.variant?.id || p.id) === currentProduct.id)
+                          .reduce((total: number, p: any) => total + p.quantity, 0);
+                        
+                        // Tìm thông tin gốc từ contract
+                        const contractItem = contractDetail.items?.find((item: any) => item.variant.id === currentProduct.id);
+                        const originalContractQuantity = contractItem?.quantity || 0;
+                        
+                        return apiRemainingQuantity !== undefined ? (
+                          <View>
+                            <View style={styles.quantityDebugContainer}>
+                              <Text style={styles.quantityDebugTitle}>📊 Tình huống số lượng:</Text>
+                              <Text style={styles.quantityDebugText}>
+                                • Số lượng hợp đồng: {originalContractQuantity}
+                              </Text>
+                              <Text style={styles.quantityDebugText}>
+                                • Còn lại (API): {apiRemainingQuantity}
+                              </Text>
+                              {usedInCurrentOrder > 0 && (
+                                <Text style={styles.quantityDebugText}>
+                                  • Đang sử dụng: {usedInCurrentOrder}
+                                </Text>
+                              )}
+                              <Text style={[styles.quantityDebugText, styles.quantityFinalText]}>
+                                ✅ Còn lại thực tế: {actualRemainingQuantity}
+                              </Text>
+                            </View>
+                            
+                            <Text style={styles.helperText}>
+                              Số lượng còn lại: {actualRemainingQuantity} (theo hợp đồng)
+                            </Text>
+                            {usedInCurrentOrder > 0 && (
+                              <Text style={styles.usedQuantityText}>
+                                Đã sử dụng trong đơn này: {usedInCurrentOrder}
+                              </Text>
+                            )}
+                          </View>
+                        ) : null;
+                      })()}
+                    </View>
 
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>
-                      Đơn giá <Text style={styles.required}>*</Text>
-                    </Text>
-                    <TextInput
-                      style={styles.input}
-                      value={currentProduct.unitPrice.toString()}
-                      onChangeText={(text) =>
-                        setCurrentProduct({
-                          ...currentProduct,
-                          unitPrice: parseFloat(text) || 0,
-                        })
-                      }
-                      placeholder="Đơn giá"
-                      keyboardType="numeric"
-                      placeholderTextColor={COLORS.gray400}
-                    />
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>
+                        Đơn giá <Text style={styles.required}>*</Text>
+                      </Text>
+                      <TextInput
+                        style={styles.input}
+                        value={currentProduct.unitPrice.toString()}
+                        onChangeText={(text: string) =>
+                          setCurrentProduct({
+                            ...currentProduct,
+                            unitPrice: parseFloat(text) || 0,
+                          })
+                        }
+                        placeholder="Đơn giá"
+                        keyboardType="numeric"
+                        placeholderTextColor={COLORS.gray400}
+                      />
                   </View>
 
                   <View style={styles.inputGroup}>
@@ -906,37 +1065,51 @@ export default function ImportGoodUpdate({ visible, orderId, onClose, onUpdated 
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Giảm giá (%)</Text>
+                    <Text style={styles.label}>Giảm giá {currentProduct.discountAmount !== undefined ? '(đ)' : '(%)'})</Text>
                     <TextInput
-                      style={styles.input}
-                      value={(currentProduct.discountRate * 100).toString()}
+                      style={[styles.input, currentProduct.discountAmount !== undefined && styles.inputDisabled]}
+                      value={currentProduct.discountAmount !== undefined
+                        ? Math.round(currentProduct.discountAmount).toLocaleString('vi-VN')
+                        : (currentProduct.discountRate * 100).toString()
+                      }
                       onChangeText={(text) =>
                         setCurrentProduct({
                           ...currentProduct,
                           discountRate: (parseFloat(text) || 0) / 100,
                         })
                       }
-                      placeholder="Phần trăm giảm giá"
+                      placeholder={currentProduct.discountAmount !== undefined ? "Giảm giá (từ hợp đồng)" : "Phần trăm giảm giá"}
                       keyboardType="numeric"
                       placeholderTextColor={COLORS.gray400}
+                      editable={currentProduct.discountAmount === undefined}
                     />
+                    {currentProduct.discountAmount !== undefined && (
+                      <Text style={styles.helperText}>Giảm giá được lấy từ hợp đồng</Text>
+                    )}
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Thuế (%)</Text>
+                    <Text style={styles.label}>Thuế {currentProduct.taxAmount !== undefined ? '(đ)' : '(%)'}</Text>
                     <TextInput
-                      style={styles.input}
-                      value={(currentProduct.taxRate * 100).toString()}
+                      style={[styles.input, currentProduct.taxAmount !== undefined && styles.inputDisabled]}
+                      value={currentProduct.taxAmount !== undefined
+                        ? Math.round(currentProduct.taxAmount).toLocaleString('vi-VN')
+                        : (currentProduct.taxRate * 100).toString()
+                      }
                       onChangeText={(text) =>
                         setCurrentProduct({
                           ...currentProduct,
                           taxRate: (parseFloat(text) || 0) / 100,
                         })
                       }
-                      placeholder="Phần trăm thuế"
+                      placeholder={currentProduct.taxAmount !== undefined ? "Thuế (từ hợp đồng)" : "Phần trăm thuế"}
                       keyboardType="numeric"
                       placeholderTextColor={COLORS.gray400}
+                      editable={currentProduct.taxAmount === undefined}
                     />
+                    {currentProduct.taxAmount !== undefined && (
+                      <Text style={styles.helperText}>Thuế được lấy từ hợp đồng</Text>
+                    )}
                   </View>
 
                   <View style={styles.inputGroup}>
@@ -1034,6 +1207,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: COLORS.gray600,
+    width: '100%',
+    textAlign: 'center',
   },
 
   // Header
@@ -1406,5 +1581,109 @@ const styles = StyleSheet.create({
     color: COLORS.gray600,
     marginTop: 4,
     fontStyle: "italic",
+  },
+  
+  // Contract warehouse info styles
+  contractWarehouseInfo: {
+    backgroundColor: COLORS.primary + "08",
+    borderWidth: 1,
+    borderColor: COLORS.primary + "20",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  contractWarehouseHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  contractWarehouseTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.primary,
+    flex: 1,
+  },
+  contractWarehouseDetails: {
+    gap: 6,
+    marginBottom: 10,
+  },
+  contractWarehouseName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.gray800,
+  },
+  contractWarehouseAddress: {
+    fontSize: 13,
+    color: COLORS.gray600,
+    lineHeight: 18,
+  },
+  contractWarehouseManager: {
+    fontSize: 13,
+    color: COLORS.gray600,
+  },
+  contractWarehousePhone: {
+    fontSize: 13,
+    color: COLORS.gray600,
+  },
+  contractWarehouseNote: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontStyle: "italic",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.primary + "20",
+  },
+  warningText: {
+    fontSize: 12,
+    color: COLORS.error,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: COLORS.error + "10",
+    borderRadius: 6,
+    fontWeight: "500",
+  },
+  usedQuantityText: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    marginTop: 2,
+    fontStyle: "italic",
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  quantityDebugContainer: {
+    backgroundColor: COLORS.gray50,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  quantityDebugTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.gray800,
+    marginBottom: 6,
+  },
+  quantityDebugText: {
+    fontSize: 11,
+    color: COLORS.gray600,
+    lineHeight: 16,
+    marginBottom: 2,
+    fontFamily: "monospace",
+  },
+  quantityFinalText: {
+    fontWeight: "700",
+    color: COLORS.success,
+    marginTop: 4,
+  },
+  inputDisabled: {
+    backgroundColor: COLORS.gray100,
+    color: COLORS.gray600,
   },
 });

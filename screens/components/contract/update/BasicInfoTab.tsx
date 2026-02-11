@@ -58,7 +58,7 @@ export default function BasicInfoTab({ form, setForm, suppliers }: BasicInfoTabP
           />
         </View>
 
-        <View style={styles.inputContainer}>
+        {/* <View style={styles.inputContainer}>
           <Text style={styles.label}>
             Số hợp đồng <Text style={styles.required}>*</Text>
           </Text>
@@ -68,7 +68,7 @@ export default function BasicInfoTab({ form, setForm, suppliers }: BasicInfoTabP
             onChangeText={(text) => handleInputChange('contractNumber', text)}
             placeholder="Nhập số hợp đồng"
           />
-        </View>
+        </View> */}
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>

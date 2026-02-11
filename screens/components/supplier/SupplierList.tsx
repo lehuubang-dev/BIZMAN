@@ -10,6 +10,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { partnerService } from '../../../services/partnerService';
 import { Supplier } from '../../../types/supplier';
+import SupplierDetail from './SupplierDetail';
 
 const COLORS = {
   primary: '#2196F3',
@@ -35,9 +36,21 @@ interface SupplierListProps {
 export default function SupplierList({ suppliers, onUpdate, onView, onRefresh }: SupplierListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
 
   const handleToggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
+  };
+
+  const handleViewDetail = (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setShowDetail(true);
+  };
+
+  const handleCloseDetail = () => {
+    setShowDetail(false);
+    setSelectedSupplier(null);
   };
 
   const handleToggleActive = async (supplier: Supplier) => {
@@ -174,7 +187,7 @@ export default function SupplierList({ suppliers, onUpdate, onView, onRefresh }:
 
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => onView(item)}
+              onPress={() => handleViewDetail(item)}
               disabled={isToggling}
             >
               <MaterialCommunityIcons name="eye-outline" size={18} color={COLORS.gray600} />
@@ -187,19 +200,28 @@ export default function SupplierList({ suppliers, onUpdate, onView, onRefresh }:
   };
 
   return (
-    <FlatList
-      data={suppliers}
-      keyExtractor={(item) => item.id}
-      renderItem={renderSupplierItem}
-      contentContainerStyle={styles.listContent}
-      ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-      ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons name="store-off-outline" size={48} color={COLORS.gray400} />
-          <Text style={styles.emptyText}>Chưa có nhà cung cấp nào</Text>
-        </View>
-      }
-    />
+    <>
+      <FlatList
+        data={suppliers}
+        keyExtractor={(item) => item.id}
+        renderItem={renderSupplierItem}
+        contentContainerStyle={styles.listContent}
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="store-off-outline" size={48} color={COLORS.gray400} />
+            <Text style={styles.emptyText}>Chưa có nhà cung cấp nào</Text>
+          </View>
+        }
+      />
+      
+      {/* Supplier Detail Modal */}
+      <SupplierDetail
+        visible={showDetail}
+        supplier={selectedSupplier}
+        onClose={handleCloseDetail}
+      />
+    </>
   );
 }
 

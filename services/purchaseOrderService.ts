@@ -425,6 +425,34 @@ class PurchaseOrderService {
       throw error;
     }
   }
+
+  /**
+   * Get product quantities by contract ID
+   */
+  async getProductQuantitiesByContractId(contractId: string): Promise<any> {
+    try {
+      console.log('🔍 Getting product quantities for contract:', contractId);
+      const response = await apiClient.get<any>(
+        `/api/v1/purchase-orders/get-product-quantity-by-contract-id?contractId=${contractId}`
+      );
+      
+      console.log('📊 Product quantities API Response (Full):', JSON.stringify(response, null, 2));
+      console.log('📊 Product quantities API Response.data:', response?.data);
+      
+      // Log từng sản phẩm và số lượng
+      if (response?.data && typeof response.data === 'object') {
+        Object.keys(response.data).forEach(variantId => {
+          const quantity = response.data[variantId];
+          console.log(`📦 Variant ${variantId}: Remaining quantity = ${quantity}`);
+        });
+      }
+      
+      return response;
+    } catch (error: any) {
+      console.error('❌ Error fetching product quantities by contract:', error);
+      throw error;
+    }
+  }
 }
 
 export const purchaseOrderService = new PurchaseOrderService();

@@ -551,27 +551,85 @@ class ProductService {
       );
       console.log('📦 Product variants by supplier API response:', response);
       
-      // Handle paginated API response format
+      // Handle paginated API response format: { success, code, message, data: { content: [...] } }
       if (response?.success && response?.data?.content && Array.isArray(response.data.content)) {
-        console.log('✅ Found variants by supplier in paginated response:', response.data.content.length);
-        return response.data.content;
+        console.log('✅ Found supplier-products in paginated response:', response.data.content.length);
+        
+        // Transform supplier-product relationships to variants with supplier info
+        const transformedVariants = response.data.content.map((supplierProduct: any) => {
+          const variant = supplierProduct.variant;
+          if (!variant) {
+            console.warn('⚠️ Supplier-product missing variant:', supplierProduct.id);
+            return null;
+          }
+          
+          return {
+            // Core variant info
+            id: variant.id,
+            sku: variant.sku,
+            name: variant.name,
+            model: variant.model,
+            partNumber: variant.partNumber,
+            attributes: variant.attributes,
+            unit: variant.unit,
+            standardCost: variant.standardCost,
+            lastPurchaseCost: variant.lastPurchaseCost,
+            active: variant.active,
+            product: variant.product,
+            documents: variant.documents,
+            supplier: variant.supplier,
+            
+            // Supplier-specific pricing and info
+            supplierSku: supplierProduct.supplierSku,
+            defaultUnitPrice: supplierProduct.defaultUnitPrice,
+            leadTimeDays: supplierProduct.leadTimeDays,
+            supplierProductActive: supplierProduct.active,
+          };
+        }).filter(Boolean); // Remove nulls
+        
+        console.log('✅ Transformed variants:', transformedVariants.length);
+        return transformedVariants;
       }
       
       // Handle API response format: { success, code, message, data: [...] }
       if (response?.success && response?.data && Array.isArray(response.data)) {
-        console.log('✅ Found variants by supplier in response.data:', response.data.length);
-        return response.data;
+        console.log('✅ Found supplier-products in response.data:', response.data.length);
+        const transformedVariants = response.data.map((supplierProduct: any) => {
+          const variant = supplierProduct.variant;
+          if (!variant) return null;
+          
+          return {
+            id: variant.id,
+            sku: variant.sku,
+            name: variant.name,
+            model: variant.model,
+            partNumber: variant.partNumber,
+            attributes: variant.attributes,
+            unit: variant.unit,
+            standardCost: variant.standardCost,
+            lastPurchaseCost: variant.lastPurchaseCost,
+            active: variant.active,
+            product: variant.product,
+            documents: variant.documents,
+            supplier: variant.supplier,
+            supplierSku: supplierProduct.supplierSku,
+            defaultUnitPrice: supplierProduct.defaultUnitPrice,
+            leadTimeDays: supplierProduct.leadTimeDays,
+            supplierProductActive: supplierProduct.active,
+          };
+        }).filter(Boolean);
+        return transformedVariants;
       }
       
       // Fallback: direct array in data
       if (response?.data && Array.isArray(response.data)) {
-        console.log('✅ Found variants by supplier in response.data (fallback):', response.data.length);
+        console.log('✅ Found supplier-products in response.data (fallback):', response.data.length);
         return response.data;
       }
       
       // Fallback: paginated format without success flag
       if (response?.data?.content && Array.isArray(response.data.content)) {
-        console.log('✅ Found variants by supplier in paginated response (no success):', response.data.content.length);
+        console.log('✅ Found supplier-products in paginated response (no success):', response.data.content.length);
         return response.data.content;
       }
       

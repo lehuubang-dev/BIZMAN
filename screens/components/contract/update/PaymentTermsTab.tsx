@@ -201,7 +201,7 @@ export default function PaymentTermsTab({ form, setForm }: PaymentTermsTabProps)
                 />
               </View>
 
-              <View style={styles.inputGroup}>
+              {/* <View style={styles.inputGroup}>
                 <Text style={styles.label}>Trạng thái</Text>
                 <View style={styles.statusContainer}>
                   {[{ key: 'PENDING', label: 'Chờ' }, { key: 'COMPLETED', label: 'Hoàn thành' }, { key: 'CANCELLED', label: 'Hủy' }, { key: 'FAILED', label: 'Thất bại ' }].map((status) => (
@@ -217,7 +217,7 @@ export default function PaymentTermsTab({ form, setForm }: PaymentTermsTabProps)
                     </TouchableOpacity>
                   ))}
                 </View>
-              </View>
+              </View> */}
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Ghi chú</Text>

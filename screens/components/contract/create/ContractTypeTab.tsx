@@ -61,11 +61,11 @@ export default function ContractTypeTab({ form, setForm }: ContractTypeTabProps)
   ];
 
   const debtModes: { value: DebtRecognitionMode; label: string; description: string }[] = [
-    { 
-      value: 'IMMEDIATE', 
-      label: 'Ngay lập tức', 
-      description: 'Ghi nhận công nợ ngay khi tạo hợp đồng' 
-    },
+    // { 
+    //   value: 'IMMEDIATE', 
+    //   label: 'Ngay lập tức', 
+    //   description: 'Ghi nhận công nợ ngay khi tạo hợp đồng' 
+    // },
     { 
       value: 'BY_COMPLETION', 
       label: 'Khi hoàn thành', 

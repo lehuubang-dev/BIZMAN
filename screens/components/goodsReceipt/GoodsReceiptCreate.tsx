@@ -1043,7 +1043,7 @@ export default function GoodsReceiptCreate({
                       />
                     </View>
 
-                    <View style={styles.inputGroup}>
+                    {/* <View style={styles.inputGroup}>
                       <Text style={styles.label}>Ngày sản xuất:</Text>
                       <TouchableOpacity 
                         style={styles.datePickerButton}
@@ -1082,9 +1082,9 @@ export default function GoodsReceiptCreate({
                           }}
                         />
                       )}
-                    </View>
+                    </View> */}
 
-                    <View style={styles.inputGroup}>
+                    {/* <View style={styles.inputGroup}>
                       <Text style={styles.label}>Hạn sử dụng:</Text>
                       <TouchableOpacity 
                         style={styles.datePickerButton}
@@ -1130,7 +1130,7 @@ export default function GoodsReceiptCreate({
                           }}
                         />
                       )}
-                    </View>
+                    </View> */}
 
                     <View style={styles.inputGroup}>
                       <Text style={styles.label}>Ghi chú</Text>
